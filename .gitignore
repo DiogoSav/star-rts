@@ -1,0 +1,8 @@
+# Godot
+.godot/
+*.tmp
+# Exportação Web (publicada à parte, na branch gh-pages)
+web/
+# Configurações locais do Claude Code
+.claude/
+__pycache__/
