@@ -40,11 +40,13 @@ func _ready() -> void:
 	title.add_theme_color_override("font_color", HUD.ACCENT)
 	box.add_child(title)
 	_button(box, "CONTINUAR", close)
-	_button(box, "REINICIAR PARTIDA", func():
+	if not Net.active:   # no multiplayer não dá para reiniciar a partida dos dois
+		_button(box, "REINICIAR PARTIDA", func():
+			get_tree().paused = false
+			get_tree().reload_current_scene())
+	_button(box, "SAIR PARA O MENU" if Net.active else "MENU PRINCIPAL", func():
 		get_tree().paused = false
-		get_tree().reload_current_scene())
-	_button(box, "MENU PRINCIPAL", func():
-		get_tree().paused = false
+		Net.leave()
 		get_tree().change_scene_to_file("res://scenes/menu.tscn"))
 	if not OS.has_feature("web"):
 		_button(box, "SAIR DO JOGO", func(): get_tree().quit())
@@ -61,7 +63,7 @@ func open() -> void:
 	if Game.game_over:
 		return
 	visible = true
-	get_tree().paused = true
+	get_tree().paused = not Net.active   # no multiplayer o jogo continua rodando
 
 
 func close() -> void:

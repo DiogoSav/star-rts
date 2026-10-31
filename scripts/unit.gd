@@ -42,6 +42,7 @@ var _pitch := 0.0
 var _lean := 0.0
 var _steer := 0.0
 var _recoil := 0.0
+var net_pos := Vector2.ZERO    # posição recebida do anfitrião (multiplayer, convidado)
 var wings: Array = []
 var spins: Array = []
 var torso: Node3D
@@ -142,13 +143,24 @@ func _process(delta: float) -> void:
 		return
 	cooldown -= delta
 	shot_timer -= delta
-	if not weapon.is_empty():
-		_update_combat(delta)
-	_follow_path(delta)
-	_separate(delta)
-	if not flying:
-		_check_stuck(delta)
+	if Net.is_client():
+		_follow_net(delta)   # convidado: só segue a posição que vem do anfitrião
+	else:
+		if not weapon.is_empty():
+			_update_combat(delta)
+		_follow_path(delta)
+		_separate(delta)
+		if not flying:
+			_check_stuck(delta)
 	_update_visuals(delta)
+
+
+## Multiplayer (convidado): desliza até a última posição recebida, sem trancos.
+func _follow_net(delta: float) -> void:
+	if position.distance_to(net_pos) > Game.TILE * 3.0:
+		position = net_pos
+	else:
+		position = position.lerp(net_pos, 1.0 - exp(-12.0 * delta))
 
 
 ## Se a unidade quer andar mas quase não sai do lugar (ex.: dois veículos de frente num

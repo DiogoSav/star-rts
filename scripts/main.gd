@@ -38,7 +38,8 @@ func _ready() -> void:
 	map = Map.new()
 	world.add_child(map)
 	Game.map = map
-	map.generate(randi(), [PLAYER_BASE, ENEMY_BASE], [
+	# No multiplayer os dois geram o mesmo mapa a partir da semente do anfitrião
+	map.generate(Net.map_seed if Net.active else randi(), [PLAYER_BASE, ENEMY_BASE], [
 		[Vector2i(18, 35), 3], [Vector2i(45, 15), 3],    # perto das bases
 		[Vector2i(32, 24), 4],                            # centro, mais rico
 		[Vector2i(13, 12), 3], [Vector2i(51, 36), 3],     # cantos
@@ -75,11 +76,12 @@ func _ready() -> void:
 	add_child(pause_menu)
 
 	ai = EnemyAI.new()
-	add_child(ai)
+	if not Net.active:
+		add_child(ai)
 
 	_setup_bases()
-	cam.focus(map.cell_center(PLAYER_BASE))
-	var f := Game.faction(Game.PLAYER)
+	cam.focus(map.cell_center(ENEMY_BASE if Game.local_team == Game.ENEMY else PLAYER_BASE))
+	var f := Game.faction(Game.local_team)
 	hud.show_message("%s: construa %s → %s e destrua a base inimiga!" % [f["army"], f["buildings"]["power"], f["buildings"]["refinery"]])
 
 
@@ -137,27 +139,37 @@ func _setup_lights() -> void:
 
 
 func _setup_bases() -> void:
-	var pf := Game.faction(Game.PLAYER)
-	var ef := Game.faction(Game.ENEMY)
-	# Jogador: só o centro de comando e algumas tropas
-	Game.spawn_building("cy", Game.PLAYER, Vector2i(6, 37))
-	for i in 3:
-		Game.spawn_unit(pf["infantry"][0], Game.PLAYER, map.cell_center(Vector2i(10 + i, 35)))
-	Game.spawn_unit(pf["starter_tank"], Game.PLAYER, map.cell_center(Vector2i(11, 37)))
-
-	# Inimigo: base pronta
-	var e := Game.ENEMY
-	Game.spawn_building("cy", e, Vector2i(52, 6))
-	Game.spawn_building("power", e, Vector2i(56, 6))
-	Game.spawn_building("power", e, Vector2i(59, 6))
-	Game.spawn_building("barracks", e, Vector2i(56, 9))
-	Game.spawn_building("refinery", e, Vector2i(52, 10))
-	Game.spawn_building("factory", e, Vector2i(58, 11))
-	Game.spawn_building("turret", e, Vector2i(49, 14))
-	Game.spawn_building("turret", e, Vector2i(54, 14))
-	Game.spawn_building("starport", e, Vector2i(48, 6))
+	if Net.is_client():
+		return   # no convidado tudo chega pelos snapshots do anfitrião
+	var P := Game.PLAYER
+	var E := Game.ENEMY
+	_starter(P, Vector2i(6, 37), Vector2i(10, 35), Vector2i(11, 37))
+	if Net.active:
+		# Multiplayer: os dois começam iguais, em cantos opostos
+		_starter(E, Vector2i(52, 6), Vector2i(50, 11), Vector2i(51, 9))
+		return
+	# Contra a IA: o inimigo começa com a base pronta
+	var ef := Game.faction(E)
+	Game.spawn_building("cy", E, Vector2i(52, 6))
+	Game.spawn_building("power", E, Vector2i(56, 6))
+	Game.spawn_building("power", E, Vector2i(59, 6))
+	Game.spawn_building("barracks", E, Vector2i(56, 9))
+	Game.spawn_building("refinery", E, Vector2i(52, 10))
+	Game.spawn_building("factory", E, Vector2i(58, 11))
+	Game.spawn_building("turret", E, Vector2i(49, 14))
+	Game.spawn_building("turret", E, Vector2i(54, 14))
+	Game.spawn_building("starport", E, Vector2i(48, 6))
 	for i in 2:
-		Game.spawn_unit(ef["infantry"][i], e, map.cell_center(Vector2i(52 + i, 15)))
+		Game.spawn_unit(ef["infantry"][i], E, map.cell_center(Vector2i(52 + i, 15)))
+
+
+## Centro de comando, 3 soldados e 1 tanque.
+func _starter(team: int, cy: Vector2i, inf: Vector2i, tank: Vector2i) -> void:
+	var f := Game.faction(team)
+	Game.spawn_building("cy", team, cy)
+	for i in 3:
+		Game.spawn_unit(f["infantry"][0], team, map.cell_center(inf + Vector2i(i, 0)))
+	Game.spawn_unit(f["starter_tank"], team, map.cell_center(tank))
 
 
 func screen_mouse() -> Vector2:
@@ -188,9 +200,10 @@ func _process(_delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_R and Game.game_over:
+		if event.keycode == KEY_R and Game.game_over and not Net.active:
 			get_tree().reload_current_scene()
 		elif event.keycode == KEY_M and Game.game_over:
+			Net.leave()
 			get_tree().change_scene_to_file("res://scenes/menu.tscn")
 		elif event.keycode == KEY_ESCAPE:
 			# Esc cancela o que estiver em andamento; sem nada para cancelar, pausa
@@ -242,11 +255,11 @@ func _finish_selection(end: Vector2) -> void:
 	var picked: Array = []
 	if rect.size.length() < 6.0:
 		var e = _entity_at()
-		if e != null and e.team == Game.PLAYER:
+		if e != null and e.team == Game.local_team:
 			picked.append(e)
 	else:
 		for e in Game.entities:
-			if e is Unit and e.team == Game.PLAYER:
+			if e is Unit and e.team == Game.local_team:
 				var c: Vector3 = e.center3d()
 				if not cam.is_position_behind(c) and rect.has_point(cam.unproject_position(c)):
 					picked.append(e)
@@ -280,9 +293,12 @@ func _command(pos: Vector2, attack_move: bool) -> void:
 	if units.is_empty():
 		return
 	var target = _entity_at()
-	if target != null and target.team != Game.PLAYER:
-		for u in units:
-			u.command_attack(target)
+	if target != null and target.team != Game.local_team:
+		if Net.is_client():
+			Net.order("attack", [units.map(func(u): return u.net_id), target.net_id])
+		else:
+			for u in units:
+				u.command_attack(target)
 		overlay.add_marker(target.position, Color(1, 0.3, 0.25))
 		return
 
@@ -290,14 +306,21 @@ func _command(pos: Vector2, attack_move: bool) -> void:
 	var n := units.size()
 	var cols := ceili(sqrt(n))
 	var rows := ceili(float(n) / cols)
+	var ids: Array = []
+	var goals: Array = []
 	for i in n:
 		var col := i % cols
 		var row := floori(float(i) / cols)
 		var off := Vector2(col - (cols - 1) / 2.0, row - (rows - 1) / 2.0) * 24.0
-		if attack_move:
+		if Net.is_client():
+			ids.append(units[i].net_id)
+			goals.append(pos + off)
+		elif attack_move:
 			units[i].command_attack_move(pos + off)
 		else:
 			units[i].command_move(pos + off)
+	if Net.is_client():
+		Net.order("attack_move" if attack_move else "move", [ids, goals])
 	overlay.add_marker(pos, Color(1, 0.6, 0.3) if attack_move else Color(0.95, 0.85, 0.5))
 
 
@@ -311,15 +334,15 @@ func _on_minimap_clicked(ground_pos: Vector2) -> void:
 ## O conserto é sempre pedido prédio a prédio; nada é consertado automaticamente.
 func toggle_repair_selected() -> void:
 	for e in selection:
-		if not (e is Building) or e.team != Game.PLAYER:
+		if not (e is Building) or e.team != Game.local_team:
 			continue
 		if e.repairing:
-			e.set_repairing(false)
+			Game.request_repair(e, false)
 			hud.show_message("Conserto interrompido")
 		elif not e.can_repair():
 			hud.show_message("Este prédio não precisa de conserto")
 		else:
-			e.set_repairing(true)
+			Game.request_repair(e, true)
 			hud.show_message("Consertando %s: %d créditos para recuperar tudo" % [
 					Game.item_name(e.type), e.repair_cost_total()])
 
@@ -336,7 +359,7 @@ func placement_cell() -> Vector2i:
 
 
 func _try_place() -> void:
-	if Game.place_building(placing, Game.PLAYER, placement_cell()):
+	if Game.place_building(placing, Game.local_team, placement_cell()):
 		placing = ""
 	else:
 		hud.show_message("Local inválido: precisa ser terreno livre, perto da sua base")
@@ -351,7 +374,7 @@ func _update_ghost() -> void:
 		_ghost_type = placing
 		if placing != "":
 			_ghost = Node3D.new()
-			var m := Models.instantiate(placing + "_" + Game.factions[Game.PLAYER])
+			var m := Models.instantiate(placing + "_" + Game.factions[Game.local_team])
 			m.name = "model"
 			_ghost.add_child(m)
 			var size: Vector2i = Game.BUILDINGS[placing]["size"]
@@ -367,7 +390,7 @@ func _update_ghost() -> void:
 		return
 	var size: Vector2i = Game.BUILDINGS[placing]["size"]
 	var cell := placement_cell()
-	var ok := Game.can_place(placing, Game.PLAYER, cell)
+	var ok := Game.can_place(placing, Game.local_team, cell)
 	_ghost.position = Game.to3d((Vector2(cell) + Vector2(size) / 2.0) * Game.TILE)
 	var col := Color(0.3, 0.85, 1.0) if ok else Color(1.0, 0.25, 0.15)
 	Models.set_ghost(_ghost.get_node("model"), Color(col, 0.6))

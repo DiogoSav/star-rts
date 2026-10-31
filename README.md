@@ -38,6 +38,26 @@ aperte **K**). Recupera 5% da vida por segundo e custa, por ponto de vida, metad
 do prédio dividida pela vida máxima. É pedido prédio a prédio, nunca automático (nem pela
 IA), e para se os créditos acabarem — aí é preciso pedir de novo.
 
+## Multiplayer 1×1 (versão Web)
+
+No menu, **MULTIPLAYER**: os dois escolhem raças diferentes; um clica em **CRIAR SALA** e
+passa o código de 5 letras; o outro digita o código e clica em **ENTRAR**. Não precisa de
+conta nem de servidor de jogo: a partida roda no navegador de quem criou a sala.
+
+Como funciona (`scripts/net.gd`):
+- **Conexão direta (WebRTC, P2P).** O "aperto de mão" inicial passa por um broker MQTT
+  público (`broker.emqx.io`, em `scripts/mqtt_signal.gd`); depois que os dois se conectam
+  o broker é fechado. Para atravessar roteadores usa STUN do Google. Em redes muito
+  restritas (alguns 4G e redes corporativas) a conexão direta pode falhar.
+- **Anfitrião manda.** Quem cria a sala (time 0) roda a simulação inteira; o convidado
+  (time 1) envia as ordens (mover, atacar, produzir, construir, consertar) e recebe 15 vezes
+  por segundo um retrato do jogo, com o movimento suavizado. Cada um tem a sua névoa.
+- Se alguém sai, o outro vence. Durante a partida a pausa não congela o jogo.
+
+Por enquanto o multiplayer só aparece na versão Web. No PC exigiria a extensão
+[webrtc-native](https://github.com/godotengine/webrtc-native) em `addons/`; com ela, o
+argumento `-- --mp-test` mostra o botão (usado para testes).
+
 ## Versão Web (navegador)
 
 O projeto exporta para HTML5/WebAssembly (preset "Web" em `export_presets.cfg`). Na Web o

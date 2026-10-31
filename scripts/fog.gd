@@ -63,7 +63,7 @@ func _process(delta: float) -> void:
 func _update_cells() -> void:
 	visible_cells.fill(0)
 	for e in Game.entities:
-		if e.team != Game.PLAYER or e.dead:
+		if e.team != Game.local_team or e.dead:
 			continue
 		var c: Vector2i = Game.map.world_to_cell(e.position)
 		var r: int = e.sight
@@ -80,7 +80,7 @@ func _update_cells() -> void:
 					explored[i] = 1
 	# Inimigos só aparecem na área visível (prédios ficam visíveis depois de explorados)
 	for e in Game.entities:
-		if e.team == Game.PLAYER:
+		if e.team == Game.local_team:
 			continue
 		var i: int = Game.map.idx(Game.map.world_to_cell(e.position))
 		if e is Building:

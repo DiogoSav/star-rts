@@ -237,7 +237,7 @@ func _process(delta: float) -> void:
 	if _dirty_timer > 0.0:
 		return
 	_dirty_timer = 0.5
-	for i in 6:
+	for i in (0 if Net.is_client() else 6):   # no convidado os cristais vêm do anfitrião
 		var j := rng.randi_range(0, W * H - 1)
 		if tiles[j] == ORE and ore[j] < ORE_MAX:
 			ore[j] = minf(ORE_MAX, ore[j] + 40.0)
@@ -246,6 +246,31 @@ func _process(delta: float) -> void:
 		_dirty = false
 		_update_cells()
 		_update_crystals()
+
+
+## Multiplayer: quantidade de cristal de cada célula, em 1 byte (0 = sem cristal).
+func ore_bytes() -> PackedByteArray:
+	var out := PackedByteArray()
+	out.resize(W * H)
+	for i in W * H:
+		out[i] = 0 if tiles[i] != ORE else clampi(ceili(ore[i] / ORE_MAX * 255.0), 1, 255)
+	return out
+
+
+func apply_ore_bytes(data: PackedByteArray) -> void:
+	for i in mini(data.size(), W * H):
+		if tiles[i] == ROCK:
+			continue
+		if data[i] == 0:
+			if tiles[i] == ORE:
+				tiles[i] = GRASS
+				ore[i] = 0.0
+				_dirty = true
+		else:
+			var v := data[i] / 255.0 * ORE_MAX
+			if absf(v - ore[i]) > 2.0:
+				ore[i] = v
+				_dirty = true
 
 
 ## Rochas, pináculos e plantas alienígenas nas células intransponíveis.

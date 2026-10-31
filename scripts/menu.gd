@@ -87,6 +87,11 @@ void fragment() {
 
 var title_page: VBoxContainer
 var faction_page: VBoxContainer
+var mp_page: VBoxContainer
+var _mp_race := "hum"
+var _race_buttons := {}
+var _code_edit: LineEdit
+var _mp_status: Label
 var _ships: Array = []
 var _enemy_buttons := {}
 
@@ -108,9 +113,13 @@ func _ready() -> void:
 	buttons.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	buttons.custom_minimum_size = Vector2(360, 0)
 	title_page.add_child(buttons)
-	buttons.add_child(_menu_button("JOGAR", func(): _show_page(faction_page)))
+	buttons.add_child(_menu_button("JOGAR CONTRA A IA", func(): _show_page(faction_page)))
+	if Net.available():
+		buttons.add_child(_menu_button("MULTIPLAYER  (1 × 1)", func(): _show_page(mp_page)))
 	if not OS.has_feature("web"):   # no navegador o jogo não pode fechar a aba
 		buttons.add_child(_menu_button("SAIR", func(): get_tree().quit()))
+
+	_build_mp_page()
 
 	faction_page = _page()
 	_title(faction_page, "escolha a sua raça")
@@ -313,9 +322,95 @@ func _title(page: VBoxContainer, subtitle: String) -> void:
 	page.add_child(sub)
 
 
+## Multiplayer: escolher a raça, criar uma sala (gera um código) ou entrar com um código.
+func _build_mp_page() -> void:
+	mp_page = _page()
+	_title(mp_page, "multiplayer  ·  1 contra 1 pela internet")
+	mp_page.visible = false
+
+	var l := Label.new()
+	l.text = "Sua raça"
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.add_theme_font_size_override("font_size", 20)
+	mp_page.add_child(l)
+	var races := HBoxContainer.new()
+	races.alignment = BoxContainer.ALIGNMENT_CENTER
+	races.add_theme_constant_override("separation", 12)
+	mp_page.add_child(races)
+	for f in Game.FACTIONS:
+		var fac: Dictionary = Game.FACTIONS[f]
+		var b := make_button(fac["army"])
+		b.toggle_mode = true
+		b.custom_minimum_size = Vector2(250, 50)
+		b.add_theme_color_override("font_pressed_color", fac["color"].lightened(0.3))
+		b.pressed.connect(_set_mp_race.bind(f))
+		races.add_child(b)
+		_race_buttons[f] = b
+	_set_mp_race(Game.player_faction)
+
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	actions.add_theme_constant_override("separation", 24)
+	mp_page.add_child(actions)
+	var create := make_button("CRIAR SALA")
+	create.custom_minimum_size = Vector2(260, 54)
+	create.pressed.connect(func(): Net.host(_mp_race))
+	actions.add_child(create)
+	var or_l := Label.new()
+	or_l.text = "ou"
+	actions.add_child(or_l)
+	_code_edit = LineEdit.new()
+	_code_edit.placeholder_text = "CÓDIGO"
+	_code_edit.max_length = 5
+	_code_edit.custom_minimum_size = Vector2(170, 54)
+	_code_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_code_edit.add_theme_font_size_override("font_size", 26)
+	_code_edit.text_changed.connect(func(t):
+		var col := _code_edit.caret_column
+		_code_edit.text = t.to_upper()
+		_code_edit.caret_column = col)
+	_code_edit.text_submitted.connect(func(_t): _join())
+	actions.add_child(_code_edit)
+	var join := make_button("ENTRAR")
+	join.custom_minimum_size = Vector2(200, 54)
+	join.pressed.connect(_join)
+	actions.add_child(join)
+
+	_mp_status = Label.new()
+	_mp_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mp_status.custom_minimum_size = Vector2(0, 90)
+	_mp_status.add_theme_font_size_override("font_size", 24)
+	_mp_status.add_theme_color_override("font_color", ACCENT)
+	_mp_status.text = "Um jogador cria a sala e passa o código; o outro digita o código e entra.\nCada jogador precisa escolher uma raça diferente."
+	mp_page.add_child(_mp_status)
+	Net.status.connect(func(t): _mp_status.text = t)
+
+	var back := _menu_button("VOLTAR", func(): _show_page(title_page))
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	back.custom_minimum_size = Vector2(240, 46)
+	mp_page.add_child(back)
+
+
+func _set_mp_race(f: String) -> void:
+	_mp_race = f
+	for k in _race_buttons:
+		_race_buttons[k].button_pressed = k == f
+
+
+func _join() -> void:
+	var c := _code_edit.text.strip_edges()
+	if c.length() != 5:
+		_mp_status.text = "Digite o código de 5 letras da sala"
+		return
+	Net.join(c, _mp_race)
+
+
 func _show_page(page: Control) -> void:
 	title_page.visible = page == title_page
 	faction_page.visible = page == faction_page
+	mp_page.visible = page == mp_page
+	if page != mp_page:
+		Net.leave()
 
 
 func _set_enemy(key: String) -> void:
@@ -422,6 +517,7 @@ func _pic(tex: Texture2D, pic_size: Vector2) -> TextureRect:
 
 
 func _start(f: String) -> void:
+	Net.leave()
 	Game.player_faction = f
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 

@@ -52,7 +52,7 @@ func _draw() -> void:
 	draw_texture_rect(_tex, Rect2(Vector2.ZERO, size), false)
 	var k := _cell_size() / Game.TILE
 	for e in Game.entities:
-		if e.team != Game.PLAYER and not e.visible:
+		if e.team != Game.local_team and not e.visible:
 			continue
 		var col: Color = Game.team_color(e.team).lightened(0.15)
 		if e is Unit and e.flying:

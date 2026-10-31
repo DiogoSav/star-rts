@@ -91,7 +91,7 @@ func finish_construction() -> void:
 	if _scan != null:
 		_scan.queue_free()
 		_scan = null
-	if type == "refinery":
+	if type == "refinery" and not Net.is_client():
 		Game.spawn_unit(Game.faction(team)["harvester"], team, dock_position())
 
 
@@ -135,7 +135,7 @@ func _process(delta: float) -> void:
 	var powered := not Game.low_power(team) or int(data["power"]) > 0
 	for s in _spins:
 		s.rotation.y += delta * (0.8 if powered else 0.1)
-	if repairing:
+	if repairing and not Net.is_client():
 		_repair(delta)
 	if not _burning and hp < max_hp * 0.5:
 		_start_burning()
@@ -145,10 +145,10 @@ func _process(delta: float) -> void:
 		_gun_angle = lerp_angle(_gun_angle, aim.angle(), minf(1.0, delta * 6.0))
 		gun.rotation.y = -_gun_angle
 	update_flash(delta)
-	if Game.game_over or weapon.is_empty():
-		return
 	cooldown -= delta
 	shot_timer -= delta
+	if Game.game_over or weapon.is_empty() or Net.is_client():
+		return # no convidado a torre só mira e mostra os tiros vindos do anfitrião
 	if Game.low_power(team):
 		return # torres desligam sem energia
 	if not (has_target and valid_target(target) and in_range(target)):
@@ -214,8 +214,7 @@ func _repair(delta: float) -> void:
 	if Game.credits[team] < cost:
 		# Sem créditos o conserto para; o jogador precisa pedir de novo
 		set_repairing(false)
-		if team == Game.PLAYER:
-			Game.message.emit("Créditos insuficientes: conserto interrompido")
+		Game.notify(team, "Créditos insuficientes: conserto interrompido")
 		return
 	Game.credits[team] -= cost
 	hp += amount

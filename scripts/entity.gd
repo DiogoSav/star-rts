@@ -15,6 +15,8 @@ var radius := 8.0
 var sight := 5
 var armor := "light"
 var dead := false
+var net_id := 0
+var _fired := false            # atirou desde o último snapshot (anfitrião)
 var flying := false
 var altitude := 0.0
 
@@ -134,6 +136,17 @@ func fire() -> void:
 	if cooldown > 0.0:
 		return
 	cooldown = float(weapon["cooldown"])
+	_fired = true
+	_shoot(true)
+
+
+## Só o visual do tiro, no convidado (o dano é calculado no anfitrião).
+func mirror_fire() -> void:
+	if valid_target(target):
+		_shoot(false)
+
+
+func _shoot(deal_damage: bool) -> void:
 	if muzzles.size() > 1:
 		_barrel = (_barrel + 1) % muzzles.size()
 		muzzle.remove_child(flash)
@@ -144,14 +157,19 @@ func fire() -> void:
 	var wtype := String(weapon["type"])
 	if wtype in Game.PROJECTILE_WEAPONS:
 		var p := Projectile.new()
-		p.setup(self, target, float(weapon["damage"]), wtype)
+		p.setup(self, target, float(weapon["damage"]) if deal_damage else 0.0, wtype)
 		Game.world.add_child(p)
-	else:
+	elif deal_damage:
 		target.take_damage(float(weapon["damage"]), wtype)
+	else:
+		target._hit_t = 0.12
 
 
 func take_damage(amount: float, weapon_type: String) -> void:
 	if dead:
+		return
+	if Net.is_client():
+		_hit_t = 0.12   # no convidado a vida vem do anfitrião; aqui só o clarão
 		return
 	var mult: float = Game.ARMOR_MULT.get(weapon_type, {}).get(armor, 1.0)
 	hp -= amount * mult

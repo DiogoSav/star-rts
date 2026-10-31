@@ -29,8 +29,8 @@ func _arrived() -> bool:
 
 func _process(delta: float) -> void:
 	super._process(delta)
-	if Game.game_over:
-		return
+	if Game.game_over or Net.is_client():
+		return # no convidado a coleta roda no anfitrião
 	think -= delta
 	match state:
 		"manual":

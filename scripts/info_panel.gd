@@ -146,7 +146,7 @@ func _process(_delta: float) -> void:
 	_hp_fill.color = Color(0.9, 0.2, 0.15) if f <= 0.25 else (Color(0.95, 0.7, 0.2) if f <= 0.5 else Color(0.45, 0.8, 0.3))
 	_hp_text.text = "Vida %d / %d" % [ceili(e.hp), int(e.max_hp)]
 	_stats.text = _building_stats(e) if e is Building else _unit_stats(e)
-	var mine: bool = e is Building and e.team == Game.PLAYER
+	var mine: bool = e is Building and e.team == Game.local_team
 	_repair_btn.visible = mine and (e.repairing or e.can_repair())
 	if _repair_btn.visible:
 		_repair_btn.text = "Parar conserto" if e.repairing else "Consertar  (%d)" % e.repair_cost_total()
@@ -159,11 +159,11 @@ func _on_repair_pressed() -> void:
 	if not (b is Building):
 		return
 	if b.repairing:
-		b.set_repairing(false)
+		Game.request_repair(b, false)
 	elif Game.credits[b.team] < b.repair_cost_per_hp():
 		Game.message.emit("Créditos insuficientes para consertar")
 	else:
-		b.set_repairing(true)
+		Game.request_repair(b, true)
 
 
 func _weapon_line(w: Dictionary) -> String:
@@ -197,7 +197,7 @@ func _building_stats(b: Building) -> String:
 		lines.append("Em construção: %d%%" % int(b.build_t * 100.0))
 	elif b.repairing:
 		lines.append("CONSERTANDO  ·  %.2f créditos por ponto de vida" % b.repair_cost_per_hp())
-	elif b.hp < b.max_hp and b.team == Game.PLAYER:
+	elif b.hp < b.max_hp and b.team == Game.local_team:
 		lines.append("Danificado  ·  conserto: %.2f créditos por ponto de vida" % b.repair_cost_per_hp())
 	var p: int = b.data["power"]
 	var power := ("Gera %d de energia" % p) if p > 0 else ("Consome %d de energia" % -p)

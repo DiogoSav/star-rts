@@ -53,7 +53,7 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 4)
 	margin.add_child(box)
 
-	var fac := Game.faction(Game.PLAYER)
+	var fac := Game.faction(Game.local_team)
 	var title := Label.new()
 	title.text = "STAR-RTS"
 	title.add_theme_font_size_override("font_size", 18)
@@ -200,7 +200,7 @@ func _section(box: VBoxContainer, title: String, list: Array) -> void:
 
 func _item_icon(t: String) -> Texture2D:
 	if Game.BUILDINGS.has(t):
-		return Game.icon(t + "_" + Game.factions[Game.PLAYER])
+		return Game.icon(t + "_" + Game.factions[Game.local_team])
 	return Game.icon(t)
 
 
@@ -228,7 +228,7 @@ func _short_name(t: String) -> String:
 
 func _on_item_pressed(t: String) -> void:
 	var cat: String = Game.item_data(t)["category"]
-	var job: Dictionary = Game.production[Game.PLAYER].get(cat, {})
+	var job: Dictionary = Game.production[Game.local_team].get(cat, {})
 	# Prédios: um por vez (depois de pronto, o clique posiciona). Unidades entram na fila.
 	if cat == "building" and not job.is_empty():
 		if job["done"] and job["type"] == t:
@@ -236,13 +236,13 @@ func _on_item_pressed(t: String) -> void:
 		elif job["type"] != t:
 			show_message("Já existe uma construção em andamento")
 		return
-	Game.start_production(Game.PLAYER, t)
+	Game.start_production(Game.local_team, t)
 
 
 func _on_item_gui_input(event: InputEvent, t: String) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		var cat: String = Game.item_data(t)["category"]
-		Game.cancel_production(Game.PLAYER, cat, t)
+		Game.cancel_production(Game.local_team, cat, t)
 
 
 func show_message(text: String) -> void:
@@ -251,7 +251,8 @@ func show_message(text: String) -> void:
 
 
 func _on_game_ended(player_won: bool) -> void:
-	end_label.text = ("VITÓRIA!" if player_won else "DERROTA") + "\n[R] jogar de novo    [M] menu"
+	end_label.text = ("VITÓRIA!" if player_won else "DERROTA") + (
+			"\n[M] menu" if Net.active else "\n[R] jogar de novo    [M] menu")
 	end_label.add_theme_color_override("font_color",
 			Color(0.45, 0.9, 1.0) if player_won else Color(1.0, 0.3, 0.25))
 
@@ -261,8 +262,8 @@ func _process(delta: float) -> void:
 	if _msg_timer <= 0.0:
 		msg_label.text = ""
 
-	credits_label.text = "Créditos  %d" % int(Game.credits[Game.PLAYER])
-	var p := Game.get_power(Game.PLAYER)
+	credits_label.text = "Créditos  %d" % int(Game.credits[Game.local_team])
+	var p := Game.get_power(Game.local_team)
 	power_label.text = "Energia %d / %d" % [p.x, p.y]
 	power_label.add_theme_color_override("font_color",
 			Color(0.95, 0.35, 0.25) if p.y > p.x else Color(0.65, 0.85, 0.45))
@@ -271,12 +272,12 @@ func _process(delta: float) -> void:
 		var b: Button = buttons[t]
 		var data := Game.item_data(t)
 		var cat: String = data["category"]
-		var job: Dictionary = Game.production[Game.PLAYER].get(cat, {})
+		var job: Dictionary = Game.production[Game.local_team].get(cat, {})
 		var mine: bool = not job.is_empty() and job["type"] == t
 		# Um prédio já pronto continua posicionável mesmo se o produtor for destruído
-		b.disabled = not Game.can_produce(Game.PLAYER, t) and not (mine and job["done"])
+		b.disabled = not Game.can_produce(Game.local_team, t) and not (mine and job["done"])
 		var bar: ColorRect = bars[t]
-		var n := Game.count_in_production(Game.PLAYER, t)
+		var n := Game.count_in_production(Game.local_team, t)
 		var count := "  ×%d" % n if n > 1 else ""
 		if mine:
 			bar.visible = true

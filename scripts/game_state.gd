@@ -328,6 +328,14 @@ const CATEGORY_NAMES := {"building": "construções", "infantry": "infantaria",
 
 ## Raça escolhida no menu (persiste entre partidas). enemy_choice "" = aleatória.
 var player_faction := "hum"
+## Time controlado por este computador (no multiplayer o convidado é o time 1)
+var local_team := PLAYER
+## Raças da partida multiplayer: [anfitrião, convidado]
+var net_factions: Array = []
+## IDs de rede de todas as entidades (iguais no anfitrião e no convidado)
+var _ids := {}
+var _next_id := 1
+var _types: Array = []
 var enemy_choice := ""
 ## Raça de cada time: [jogador, inimigo]
 var factions: Array = ["hum", "ins"]
@@ -430,6 +438,10 @@ func reset() -> void:
 		var others: Array = FACTIONS.keys().filter(func(k): return k != player_faction)
 		enemy = others.pick_random()
 	factions = [player_faction, enemy]
+	if Net.active:
+		factions = net_factions.duplicate()
+	_ids = {}
+	_next_id = 1
 	credits = [START_CREDITS, START_CREDITS]
 	entities = []
 	production = [{}, {}]
@@ -455,9 +467,9 @@ func item_data(type: String) -> Dictionary:
 
 
 ## Nome de uma unidade ou prédio (prédios têm nome próprio em cada raça).
-func item_name(type: String, team := PLAYER) -> String:
+func item_name(type: String, team := -1) -> String:
 	if BUILDINGS.has(type):
-		return faction(team)["buildings"].get(type, BUILDINGS[type]["name"])
+		return faction(local_team if team < 0 else team)["buildings"].get(type, BUILDINGS[type]["name"])
 	return UNITS[type]["name"]
 
 
@@ -548,18 +560,20 @@ func can_produce(team: int, type: String) -> bool:
 
 ## Começa a produzir `type` ou, se a categoria já está ocupada, põe na fila (paga na hora).
 func start_production(team: int, type: String) -> bool:
+	if Net.is_client():
+		Net.order("produce", [type])
+		return true
 	var data := item_data(type)
 	var cat: String = data["category"]
 	if not can_produce(team, type):
 		return false
 	var busy: bool = production[team].has(cat)
 	if busy and (cat == "building" or queued(team, cat).size() + 1 >= MAX_QUEUE):
-		if team == PLAYER and cat != "building":
-			message.emit("Fila de produção cheia (máximo %d)" % MAX_QUEUE)
+		if cat != "building":
+			notify(team, "Fila de produção cheia (máximo %d)" % MAX_QUEUE)
 		return false
 	if credits[team] < data["cost"]:
-		if team == PLAYER:
-			message.emit("Créditos insuficientes")
+		notify(team, "Créditos insuficientes")
 		return false
 	credits[team] -= data["cost"]
 	if busy:
@@ -587,6 +601,9 @@ func count_in_production(team: int, type: String) -> int:
 ## Cancela um `type` (o último da fila; se não houver na fila, o que está sendo produzido)
 ## e devolve os créditos.
 func cancel_production(team: int, cat: String, type := "") -> void:
+	if Net.is_client():
+		Net.order("cancel", [cat, type])
+		return
 	var q := queued(team, cat)
 	var i := q.rfind(type) if type != "" else -1
 	if i >= 0:
@@ -598,8 +615,7 @@ func cancel_production(team: int, cat: String, type := "") -> void:
 		_next_job(team, cat)
 	else:
 		return
-	if team == PLAYER:
-		message.emit("Produção cancelada")
+	notify(team, "Produção cancelada")
 
 
 ## Passa o próximo da fila para a produção.
@@ -610,7 +626,7 @@ func _next_job(team: int, cat: String) -> void:
 
 
 func _process(delta: float) -> void:
-	if game_over or map == null:
+	if game_over or map == null or Net.is_client():
 		return
 	for team in 2:
 		var mult := 0.5 if low_power(team) else 1.0
@@ -626,8 +642,7 @@ func _process(delta: float) -> void:
 				job["progress"] = 1.0
 				if cat == "building":
 					job["done"] = true
-					if team == PLAYER:
-						message.emit("Construção pronta: clique no botão e posicione no mapa")
+					notify(team, "Construção pronta: clique no botão e posicione no mapa")
 				else:
 					var pos := producer.position if cat == "air" else producer.exit_position()
 					spawn_unit(job["type"], team, pos)
@@ -647,6 +662,7 @@ func spawn_unit(type: String, team: int, pos: Vector2) -> Unit:
 	u.position = pos
 	world.add_child(u)
 	entities.append(u)
+	set_net_id(u, _next_id)
 	return u
 
 
@@ -656,6 +672,7 @@ func spawn_building(type: String, team: int, cell: Vector2i, animate := false) -
 	b.setup(type, team, cell)
 	world.add_child(b)
 	entities.append(b)
+	set_net_id(b, _next_id)
 	map.set_cells_blocked(b.cell, b.size, true)
 	for e in entities:
 		if e is Unit:
@@ -685,6 +702,11 @@ func can_place(type: String, team: int, cell: Vector2i) -> bool:
 
 
 func place_building(type: String, team: int, cell: Vector2i) -> bool:
+	if Net.is_client():
+		if not can_place(type, team, cell):
+			return false
+		Net.order("place", [type, cell])
+		return true
 	var job: Dictionary = production[team].get("building", {})
 	if job.is_empty() or not job["done"] or job["type"] != type:
 		return false
@@ -697,12 +719,56 @@ func place_building(type: String, team: int, cell: Vector2i) -> bool:
 
 func remove_entity(e) -> void:
 	entities.erase(e)
-	if game_over or not (e is Building):
-		return
+	_ids.erase(e.net_id)
+	if game_over or not (e is Building) or Net.is_client():
+		return # no convidado quem decide o fim da partida é o anfitrião
 	var team: int = e.team
 	if building_count(team) == 0:
 		game_over = true
-		game_ended.emit(team == ENEMY)
+		game_ended.emit(team != local_team)
+		Net.send_game_over(team)
+
+
+## Mensagem para o dono do time: aparece aqui se for o jogador local; no multiplayer, o
+## anfitrião repassa as do time do convidado.
+func notify(team: int, text: String) -> void:
+	if team == local_team:
+		message.emit(text)
+	elif Net.is_host():
+		Net.send_message(text)
+
+
+## Liga/desliga o conserto de um prédio (o convidado pede ao anfitrião).
+func request_repair(b: Building, on: bool) -> void:
+	if Net.is_client():
+		Net.order("repair", [b.net_id, on])
+	else:
+		b.set_repairing(on)
+
+
+func set_net_id(e, id: int) -> void:
+	_ids.erase(e.net_id)
+	e.net_id = id
+	_ids[id] = e
+	_next_id = maxi(_next_id, id + 1)
+
+
+func by_id(id: int):
+	var e = _ids.get(id)
+	return e if is_instance_valid(e) and not e.dead else null
+
+
+## Índice compacto de cada tipo de unidade/prédio (igual nos dois computadores).
+func type_index(type: String) -> int:
+	if _types.is_empty():
+		_types = UNITS.keys() + BUILDINGS.keys()
+		_types.sort()
+	return _types.find(type)
+
+
+func type_name(i: int) -> String:
+	type_index("")
+	return _types[i] if i >= 0 and i < _types.size() else ""
 
 
 func spawn_explosion(pos: Vector2, size: float, height := 0.0, color := Color(1.0, 0.55, 0.2)) -> void:
