@@ -40,9 +40,15 @@ IA), e para se os créditos acabarem — aí é preciso pedir de novo.
 
 ## Multiplayer 1×1 (versão Web)
 
-No menu, **MULTIPLAYER**: os dois escolhem raças diferentes; um clica em **CRIAR SALA** e
-passa o código de 5 letras; o outro digita o código e clica em **ENTRAR**. Não precisa de
-conta nem de servidor de jogo: a partida roda no navegador de quem criou a sala.
+No menu, **MULTIPLAYER**: digite seu nome; um jogador clica em **CRIAR SALA** e passa o
+código de 5 letras; o outro digita o código e clica em **ENTRAR**. Não precisa de conta nem
+de servidor de jogo: a partida roda no navegador de quem criou a sala.
+
+**Sala de espera:** mostra os dois jogadores (nome, raça e se está pronto), um chat e a
+escolha de raça (a raça do outro fica bloqueada). Quando **os dois apertam PRONTO** começa
+uma contagem de 3 s (desmarcar cancela). Na partida, cada um espera o outro terminar de
+carregar ("Aguardando … terminar de carregar") e o jogo começa ao mesmo tempo para os dois.
+Se o convidado sai da sala, ela continua aberta com o mesmo código.
 
 Como funciona (`scripts/net.gd`):
 - **Conexão direta (WebRTC, P2P).** O "aperto de mão" inicial passa por um broker MQTT

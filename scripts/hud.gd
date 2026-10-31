@@ -71,6 +71,8 @@ func _ready() -> void:
 	top.add_child(menu_b)
 	var side_label := Label.new()
 	side_label.text = "%s — %s" % [fac["army"], fac["name"]]
+	if Net.active:
+		side_label.text = "%s (%s)  ×  %s" % [Net.names[Net.me()], fac["army"], Net.names[1 - Net.me()]]
 	side_label.add_theme_font_size_override("font_size", 14)
 	side_label.add_theme_color_override("font_color", fac["color"])
 	box.add_child(side_label)
@@ -243,6 +245,13 @@ func _on_item_gui_input(event: InputEvent, t: String) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		var cat: String = Game.item_data(t)["category"]
 		Game.cancel_production(Game.local_team, cat, t)
+
+
+## Aviso grande no centro (multiplayer: esperando o outro jogador). Texto vazio esconde.
+func set_waiting(text: String) -> void:
+	end_label.text = text
+	end_label.add_theme_color_override("font_color", ACCENT)
+	end_label.add_theme_font_size_override("font_size", 40 if text != "" else 64)
 
 
 func show_message(text: String) -> void:

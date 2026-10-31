@@ -88,10 +88,18 @@ void fragment() {
 var title_page: VBoxContainer
 var faction_page: VBoxContainer
 var mp_page: VBoxContainer
-var _mp_race := "hum"
+var room_page: VBoxContainer
 var _race_buttons := {}
+var _name_edit: LineEdit
 var _code_edit: LineEdit
 var _mp_status: Label
+var _room_title: Label
+var _room_hint: Label
+var _cards: Array = []
+var _chat_log: RichTextLabel
+var _chat_edit: LineEdit
+var _countdown_label: Label
+var _ready_button: Button
 var _ships: Array = []
 var _enemy_buttons := {}
 
@@ -322,31 +330,27 @@ func _title(page: VBoxContainer, subtitle: String) -> void:
 	page.add_child(sub)
 
 
-## Multiplayer: escolher a raça, criar uma sala (gera um código) ou entrar com um código.
+## Multiplayer, 1ª tela: nome do jogador, criar uma sala ou entrar com um código.
 func _build_mp_page() -> void:
 	mp_page = _page()
 	_title(mp_page, "multiplayer  ·  1 contra 1 pela internet")
 	mp_page.visible = false
 
-	var l := Label.new()
-	l.text = "Sua raça"
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 20)
-	mp_page.add_child(l)
-	var races := HBoxContainer.new()
-	races.alignment = BoxContainer.ALIGNMENT_CENTER
-	races.add_theme_constant_override("separation", 12)
-	mp_page.add_child(races)
-	for f in Game.FACTIONS:
-		var fac: Dictionary = Game.FACTIONS[f]
-		var b := make_button(fac["army"])
-		b.toggle_mode = true
-		b.custom_minimum_size = Vector2(250, 50)
-		b.add_theme_color_override("font_pressed_color", fac["color"].lightened(0.3))
-		b.pressed.connect(_set_mp_race.bind(f))
-		races.add_child(b)
-		_race_buttons[f] = b
-	_set_mp_race(Game.player_faction)
+	var name_row := HBoxContainer.new()
+	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	name_row.add_theme_constant_override("separation", 12)
+	mp_page.add_child(name_row)
+	var nl := Label.new()
+	nl.text = "Seu nome"
+	nl.add_theme_font_size_override("font_size", 22)
+	name_row.add_child(nl)
+	_name_edit = LineEdit.new()
+	_name_edit.max_length = 16
+	_name_edit.custom_minimum_size = Vector2(320, 50)
+	_name_edit.add_theme_font_size_override("font_size", 24)
+	_name_edit.text = Game.player_name
+	_name_edit.text_changed.connect(func(t): Game.player_name = t.strip_edges())
+	name_row.add_child(_name_edit)
 
 	var actions := HBoxContainer.new()
 	actions.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -354,7 +358,7 @@ func _build_mp_page() -> void:
 	mp_page.add_child(actions)
 	var create := make_button("CRIAR SALA")
 	create.custom_minimum_size = Vector2(260, 54)
-	create.pressed.connect(func(): Net.host(_mp_race))
+	create.pressed.connect(_create_room)
 	actions.add_child(create)
 	var or_l := Label.new()
 	or_l.text = "ou"
@@ -378,23 +382,144 @@ func _build_mp_page() -> void:
 
 	_mp_status = Label.new()
 	_mp_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_mp_status.custom_minimum_size = Vector2(0, 90)
-	_mp_status.add_theme_font_size_override("font_size", 24)
+	_mp_status.custom_minimum_size = Vector2(0, 70)
+	_mp_status.add_theme_font_size_override("font_size", 22)
 	_mp_status.add_theme_color_override("font_color", ACCENT)
-	_mp_status.text = "Um jogador cria a sala e passa o código; o outro digita o código e entra.\nCada jogador precisa escolher uma raça diferente."
+	_mp_status.text = "Um jogador cria a sala e passa o código; o outro digita o código e entra."
 	mp_page.add_child(_mp_status)
-	Net.status.connect(func(t): _mp_status.text = t)
 
 	var back := _menu_button("VOLTAR", func(): _show_page(title_page))
 	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	back.custom_minimum_size = Vector2(240, 46)
 	mp_page.add_child(back)
 
+	_build_room_page()
+	Net.status.connect(_on_net_status)
+	Net.room_changed.connect(_refresh_room)
+	Net.chat.connect(_on_chat)
+	Net.countdown.connect(_on_countdown)
 
-func _set_mp_race(f: String) -> void:
-	_mp_race = f
-	for k in _race_buttons:
-		_race_buttons[k].button_pressed = k == f
+
+## Multiplayer, 2ª tela: a sala de espera. Mostra os dois jogadores (nome, raça, pronto),
+## a escolha de raça, o chat e o botão PRONTO.
+func _build_room_page() -> void:
+	room_page = _page()
+	room_page.add_theme_constant_override("separation", 12)
+	room_page.visible = false
+	_room_title = Label.new()
+	_room_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_room_title.add_theme_font_size_override("font_size", 44)
+	_room_title.add_theme_color_override("font_color", Color(0.8, 0.95, 1.0))
+	room_page.add_child(_room_title)
+	_room_hint = Label.new()
+	_room_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_room_hint.add_theme_font_size_override("font_size", 18)
+	_room_hint.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
+	room_page.add_child(_room_hint)
+
+	# Os dois jogadores
+	var players := HBoxContainer.new()
+	players.alignment = BoxContainer.ALIGNMENT_CENTER
+	players.add_theme_constant_override("separation", 30)
+	room_page.add_child(players)
+	for i in 2:
+		var card := PanelContainer.new()
+		card.custom_minimum_size = Vector2(430, 120)
+		var box := VBoxContainer.new()
+		box.alignment = BoxContainer.ALIGNMENT_CENTER
+		card.add_child(box)
+		var n := Label.new()
+		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		n.add_theme_font_size_override("font_size", 28)
+		box.add_child(n)
+		var r := Label.new()
+		r.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		r.add_theme_font_size_override("font_size", 20)
+		box.add_child(r)
+		var s := Label.new()
+		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		s.add_theme_font_size_override("font_size", 20)
+		box.add_child(s)
+		players.add_child(card)
+		_cards.append({"panel": card, "name": n, "race": r, "state": s})
+
+	# Escolha de raça (do jogador local)
+	var races := HBoxContainer.new()
+	races.alignment = BoxContainer.ALIGNMENT_CENTER
+	races.add_theme_constant_override("separation", 12)
+	room_page.add_child(races)
+	var rl := Label.new()
+	rl.text = "Sua raça:"
+	rl.add_theme_font_size_override("font_size", 20)
+	races.add_child(rl)
+	for f in Game.FACTIONS:
+		var fac: Dictionary = Game.FACTIONS[f]
+		var b := make_button(fac["army"])
+		b.toggle_mode = true
+		b.custom_minimum_size = Vector2(240, 46)
+		b.add_theme_font_size_override("font_size", 20)
+		b.add_theme_color_override("font_pressed_color", fac["color"].lightened(0.3))
+		b.pressed.connect(func(): Net.set_race(f))
+		races.add_child(b)
+		_race_buttons[f] = b
+
+	# Chat
+	var chat_box := VBoxContainer.new()
+	chat_box.custom_minimum_size = Vector2(900, 0)
+	chat_box.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	room_page.add_child(chat_box)
+	_chat_log = RichTextLabel.new()
+	_chat_log.custom_minimum_size = Vector2(900, 170)
+	_chat_log.scroll_following = true
+	_chat_log.add_theme_font_size_override("normal_font_size", 18)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.02, 0.04, 0.07, 0.85)
+	sb.border_color = ACCENT.darkened(0.55)
+	sb.set_border_width_all(1)
+	sb.set_content_margin_all(10)
+	_chat_log.add_theme_stylebox_override("normal", sb)
+	chat_box.add_child(_chat_log)
+	var chat_row := HBoxContainer.new()
+	chat_box.add_child(chat_row)
+	_chat_edit = LineEdit.new()
+	_chat_edit.placeholder_text = "Escreva uma mensagem e aperte Enter"
+	_chat_edit.max_length = 200
+	_chat_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chat_edit.add_theme_font_size_override("font_size", 18)
+	_chat_edit.text_submitted.connect(func(_t): _send_chat())
+	chat_row.add_child(_chat_edit)
+	var send := make_button("ENVIAR")
+	send.custom_minimum_size = Vector2(140, 40)
+	send.add_theme_font_size_override("font_size", 18)
+	send.pressed.connect(_send_chat)
+	chat_row.add_child(send)
+
+	_countdown_label = Label.new()
+	_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_countdown_label.add_theme_font_size_override("font_size", 26)
+	_countdown_label.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
+	room_page.add_child(_countdown_label)
+
+	var buttons := HBoxContainer.new()
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons.add_theme_constant_override("separation", 24)
+	room_page.add_child(buttons)
+	_ready_button = make_button("PRONTO")
+	_ready_button.toggle_mode = true
+	_ready_button.custom_minimum_size = Vector2(260, 56)
+	_ready_button.toggled.connect(func(on): Net.set_ready(on))
+	buttons.add_child(_ready_button)
+	var exit := make_button("SAIR DA SALA")
+	exit.custom_minimum_size = Vector2(260, 56)
+	exit.pressed.connect(func(): _show_page(mp_page))
+	buttons.add_child(exit)
+
+
+func _create_room() -> void:
+	Game.player_name = _player_name()
+	_chat_log.clear()
+	Net.host(Game.player_name, Game.player_faction)
+	_show_page(room_page, false)
 
 
 func _join() -> void:
@@ -402,15 +527,89 @@ func _join() -> void:
 	if c.length() != 5:
 		_mp_status.text = "Digite o código de 5 letras da sala"
 		return
-	Net.join(c, _mp_race)
+	Game.player_name = _player_name()
+	_chat_log.clear()
+	Net.join(c, Game.player_name)
+	_show_page(room_page, false)
+	_refresh_room()
 
 
-func _show_page(page: Control) -> void:
+func _player_name() -> String:
+	var n := _name_edit.text.strip_edges()
+	return n if n != "" else "Comandante %d" % (randi() % 900 + 100)
+
+
+func _send_chat() -> void:
+	Net.send_chat(_chat_edit.text)
+	_chat_edit.text = ""
+
+
+func _on_net_status(text: String) -> void:
+	_mp_status.text = text
+	_room_hint.text = text
+	if Net.role == "" and room_page.visible:
+		_show_page(mp_page, false)   # a sala fechou ou não foi encontrada
+
+
+func _on_chat(line: String) -> void:
+	_chat_log.append_text(line.replace("[", "[lb]") + "\n")
+
+
+func _on_countdown(n: int) -> void:
+	_countdown_label.text = "" if n < 0 else "Os dois estão prontos! Começando em %d…" % n
+
+
+## Atualiza os cartões dos jogadores, as raças bloqueadas e o botão PRONTO.
+func _refresh_room() -> void:
+	if Net.role == "":
+		return
+	var me := Net.me()
+	_room_title.text = "SALA  %s" % Net.code
+	for i in 2:
+		var p: Dictionary = Net.room[i]
+		var c: Dictionary = _cards[i]
+		var you := "  (você)" if i == me else ""
+		var sb := StyleBoxFlat.new()
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(4)
+		sb.bg_color = Color(0.02, 0.04, 0.07, 0.85)
+		if p.is_empty():
+			c["name"].text = "Aguardando jogador…" if i == 1 else "Anfitrião"
+			c["race"].text = ""
+			c["state"].text = ""
+			sb.border_color = Color(0.2, 0.25, 0.3)
+		else:
+			var fac: Dictionary = Game.FACTIONS.get(p.get("race", ""), {})
+			c["name"].text = String(p["name"]) + you
+			c["race"].text = fac.get("army", "escolhendo raça…")
+			c["race"].add_theme_color_override("font_color", fac.get("color", Color(0.7, 0.7, 0.7)))
+			c["state"].text = "PRONTO ✓" if p.get("ready", false) else "ainda não está pronto"
+			c["state"].add_theme_color_override("font_color",
+					Color(0.5, 1.0, 0.5) if p.get("ready", false) else Color(0.7, 0.75, 0.8))
+			sb.border_color = fac.get("color", ACCENT).darkened(0.2)
+		c["panel"].add_theme_stylebox_override("panel", sb)
+	var mine: Dictionary = Net.room[me]
+	var other: Dictionary = Net.room[1 - me]
+	for f in _race_buttons:
+		_race_buttons[f].set_pressed_no_signal(mine.get("race", "") == f)
+		_race_buttons[f].disabled = other.get("race", "") == f
+	_ready_button.set_pressed_no_signal(mine.get("ready", false))
+	_ready_button.disabled = other.is_empty() or not Game.FACTIONS.has(mine.get("race", ""))
+	_ready_button.text = "PRONTO ✓" if mine.get("ready", false) else "PRONTO"
+	if Net.role == "host" and other.is_empty():
+		_room_hint.text = "Passe o código  %s  para o outro jogador e aguarde ele entrar." % Net.code
+
+
+func _show_page(page: Control, leave := true) -> void:
 	title_page.visible = page == title_page
 	faction_page.visible = page == faction_page
 	mp_page.visible = page == mp_page
-	if page != mp_page:
+	room_page.visible = page == room_page
+	if leave and page != room_page:
 		Net.leave()
+	if page == room_page:
+		_countdown_label.text = ""
+		_refresh_room()
 
 
 func _set_enemy(key: String) -> void:

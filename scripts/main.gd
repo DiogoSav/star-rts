@@ -83,6 +83,13 @@ func _ready() -> void:
 	cam.focus(map.cell_center(ENEMY_BASE if Game.local_team == Game.ENEMY else PLAYER_BASE))
 	var f := Game.faction(Game.local_team)
 	hud.show_message("%s: construa %s → %s e destrua a base inimiga!" % [f["army"], f["buildings"]["power"], f["buildings"]["refinery"]])
+	if Net.active:
+		# Multiplayer: congela até os dois jogadores terminarem de carregar
+		hud.set_waiting("Aguardando %s terminar de carregar…" % Net.names[1 - Net.me()])
+		Net.go.connect(func():
+			hud.set_waiting("")
+			hud.show_message("A partida começou! Boa sorte, %s." % Net.names[Net.me()]), CONNECT_ONE_SHOT)
+		Net.scene_loaded()
 
 
 ## Planeta alienígena: sol branco-azulado, luz de preenchimento violeta, bloom, oclusão de

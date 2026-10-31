@@ -5,33 +5,49 @@ extends Node
 ## (oferta, resposta e candidatos ICE) passa por um broker MQTT público (MqttSignal); depois
 ## os dois conversam direto (P2P) e o broker é fechado.
 ##
+## Sala de espera: com os dois conectados, cada um escolhe nome e raça, conversa no chat e
+## aperta PRONTO. O anfitrião guarda o estado da sala (`room`) e o repassa ao convidado; com
+## os dois prontos começa uma contagem e a partida. Na partida, os dois carregam o mapa e o
+## jogo só começa quando ambos avisam que terminaram (_loaded -> _go).
+##
 ## Partida: o anfitrião (time 0) roda a simulação inteira, como no modo contra a IA. O
 ## convidado (time 1) não simula nada: envia as ordens (_order) e recebe ~15 vezes por segundo
 ## um retrato do jogo (_snap) que aplica nas suas unidades-espelho, com movimento suavizado.
 
 signal status(text: String)
+signal room_changed           # mudou alguém, raça ou pronto
+signal chat(line: String)
+signal countdown(seconds: int)   # -1 = contagem cancelada
 signal started
+signal go                     # os dois carregaram: a partida começa de verdade
 
 const BROKER := "wss://broker.emqx.io:8084/mqtt"
 const TOPIC := "starrts/v1/%s/%s"
 const ICE := {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}]}
 const CODE_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const SNAP_RATE := 1.0 / 15.0
+const COUNTDOWN := 3
 ## Campos por entidade no snapshot
 const F := 12
 
 var role := ""          # "", "host", "guest"
 var active := false     # partida multiplayer em andamento
+var connected := false  # os dois estão conectados (sala ou partida)
+var waiting := false    # partida carregada, esperando o outro jogador
 var code := ""
-var race := ""
 var map_seed := 0
+## Sala: [anfitrião, convidado]; cada um {"name", "race", "ready"} ou {} se vazio
+var room: Array = [{}, {}]
+var names: Array = ["", ""]
 var _sig: MqttSignal
 var _pc: WebRTCPeerConnection
 var _mp: WebRTCMultiplayerPeer
 var _guest_tag := ""
 var _snap_t := 0.0
 var _ore_t := 0.0
-var _connected := false
+var _count_t := -1.0
+var _count_n := 0
+var _loaded := [false, false]
 
 
 ## Multiplayer disponível? Por enquanto só na versão Web (o navegador já traz o WebRTC).
@@ -48,24 +64,30 @@ func is_client() -> bool:
 	return active and role == "guest"
 
 
-# ---------------------------------------------------------------- sala
+## Índice do jogador local na sala (0 anfitrião, 1 convidado).
+func me() -> int:
+	return 0 if role == "host" else 1
 
-func host(my_race: String) -> void:
+
+# ---------------------------------------------------------------- conexão
+
+func host(my_name: String, my_race: String) -> void:
 	_reset()
 	role = "host"
-	race = my_race
 	code = ""
 	for i in 5:
 		code += CODE_CHARS[randi() % CODE_CHARS.length()]
+	room = [{"name": my_name, "race": my_race, "ready": false}, {}]
 	_start_signal(TOPIC % [code, "host"])
 	status.emit("Criando sala…")
+	room_changed.emit()
 
 
-func join(room: String, my_race: String) -> void:
+func join(room_code: String, my_name: String) -> void:
 	_reset()
 	role = "guest"
-	race = my_race
-	code = room.strip_edges().to_upper()
+	code = room_code.strip_edges().to_upper()
+	room = [{}, {"name": my_name, "race": "", "ready": false}]
 	_guest_tag = str(randi() % 1000000)
 	_start_signal(TOPIC % [code, "guest-" + _guest_tag])
 	status.emit("Procurando a sala %s…" % code)
@@ -76,9 +98,20 @@ func leave() -> void:
 
 
 func _reset() -> void:
+	_close_peer()
 	if _sig != null:
 		_sig.close()
 	_sig = null
+	role = ""
+	active = false
+	connected = false
+	waiting = false
+	_count_t = -1.0
+	room = [{}, {}]
+	Game.local_team = Game.PLAYER
+
+
+func _close_peer() -> void:
 	if _pc != null:
 		_pc.close()
 	_pc = null
@@ -86,10 +119,6 @@ func _reset() -> void:
 		_mp.close()
 	_mp = null
 	multiplayer.multiplayer_peer = null
-	role = ""
-	active = false
-	_connected = false
-	Game.local_team = Game.PLAYER
 
 
 func _start_signal(topic: String) -> void:
@@ -102,7 +131,7 @@ func _start_signal(topic: String) -> void:
 
 func _on_signal_ready() -> void:
 	if role == "host":
-		status.emit("Sala criada! Código: %s\nPasse o código para o outro jogador e aguarde…" % code)
+		status.emit("Sala criada! Passe o código %s para o outro jogador." % code)
 	else:
 		_make_peer()
 		_pc.create_offer()
@@ -161,29 +190,56 @@ func _ready() -> void:
 
 
 func _on_peer_connected(_id: int) -> void:
-	_connected = true
+	connected = true
 	if _sig != null:
 		_sig.close()   # o broker só serve para o aperto de mão
 		_sig = null
 	if role == "guest":
-		status.emit("Conectado! Aguardando o anfitrião…")
-		_hello.rpc_id(1, race)
+		status.emit("Conectado! Entrando na sala…")
+		_hello.rpc_id(1, room[1]["name"])
 
 
 func _on_peer_disconnected(_id: int) -> void:
-	if active and not Game.game_over:
-		Game.message.emit("O outro jogador saiu da partida")
-		Game.game_over = true
-		Game.game_ended.emit(true)
-	elif not active:
-		status.emit("O outro jogador desconectou")
-	_connected = false
+	connected = false
+	if active:
+		if not Game.game_over:
+			Game.message.emit("O outro jogador saiu da partida")
+			Game.game_over = true
+			Game.game_ended.emit(true)
+		if waiting:
+			waiting = false
+			get_tree().paused = false
+		return
+	if role == "host":
+		# Convidado saiu da sala: ela volta a esperar alguém com o mesmo código
+		_add_chat("%s saiu da sala." % room[1].get("name", "O convidado"))
+		_cancel_countdown()
+		room[1] = {}
+		room[0]["ready"] = false
+		room_changed.emit()
+		_close_peer()
+		_start_signal(TOPIC % [code, "host"])
+	else:
+		status.emit("O anfitrião fechou a sala.")
+		_reset()
+		room_changed.emit()
 
 
 func _process(delta: float) -> void:
 	if _sig != null:
 		_sig.poll(delta)
-	if not is_host() or Game.map == null or Game.game_over:
+	if role == "host" and not active and _count_t >= 0.0:
+		_count_t -= delta
+		if _count_t <= 0.0:
+			_count_n -= 1
+			if _count_n <= 0:
+				_count_t = -1.0
+				_start.rpc(randi(), [room[0]["race"], room[1]["race"]], [room[0]["name"], room[1]["name"]])
+			else:
+				_count_t = 1.0
+				_countdown.rpc(_count_n)
+				countdown.emit(_count_n)
+	if not is_host() or Game.map == null or Game.game_over or waiting:
 		return
 	_snap_t -= delta
 	if _snap_t <= 0.0:
@@ -195,34 +251,176 @@ func _process(delta: float) -> void:
 		_snap.rpc(_build_snapshot(with_ore))
 
 
-# ---------------------------------------------------------------- lobby (RPC)
+# ---------------------------------------------------------------- sala de espera
+
+## O jogador local escolhe uma raça (a do outro jogador fica bloqueada).
+func set_race(r: String) -> void:
+	_request(me(), {"race": r, "ready": false})
+
+
+func set_ready(on: bool) -> void:
+	_request(me(), {"ready": on})
+
+
+func send_chat(text: String) -> void:
+	text = text.strip_edges().left(200)
+	if text == "" or not connected and role != "host":
+		return
+	if role == "host":
+		_say(0, text)
+	else:
+		_chat_in.rpc_id(1, text)
+
+
+func _request(who: int, change: Dictionary) -> void:
+	if role == "host":
+		_apply_change(who, change)
+	elif connected:
+		_change_in.rpc_id(1, change)
+
+
+## Só o anfitrião muda a sala; depois repassa a sala inteira ao convidado.
+func _apply_change(who: int, change: Dictionary) -> void:
+	var p: Dictionary = room[who]
+	if p.is_empty():
+		return
+	var other: Dictionary = room[1 - who]
+	if change.has("race"):
+		var r := String(change["race"])
+		if Game.FACTIONS.has(r) and other.get("race", "") != r:
+			p["race"] = r
+		p["ready"] = false
+	if change.has("ready"):
+		p["ready"] = bool(change["ready"]) and Game.FACTIONS.has(p.get("race", ""))
+	_broadcast_room()
+	var all_ready: bool = not other.is_empty() and p["ready"] and other.get("ready", false)
+	if all_ready and _count_t < 0.0:
+		_count_n = COUNTDOWN
+		_count_t = 1.0
+		_countdown.rpc(_count_n)
+		countdown.emit(_count_n)
+	elif not all_ready:
+		_cancel_countdown()
+
+
+func _cancel_countdown() -> void:
+	if _count_t >= 0.0:
+		_count_t = -1.0
+		if connected:
+			_countdown.rpc(-1)
+		countdown.emit(-1)
+
+
+func _broadcast_room() -> void:
+	room_changed.emit()
+	if connected:
+		_room.rpc(room)
+
+
+func _say(who: int, text: String) -> void:
+	var line := "%s: %s" % [room[who].get("name", "?"), text]
+	_add_chat(line)
+	if connected:
+		_chat_out.rpc(line)
+
+
+func _add_chat(line: String) -> void:
+	chat.emit(line)
+
 
 @rpc("any_peer", "call_remote", "reliable")
-func _hello(guest_race: String) -> void:
-	if role != "host":
+func _hello(guest_name: String) -> void:
+	if role != "host" or active:
 		return
-	if guest_race == race:
-		_reject.rpc_id(2, "O anfitrião já escolheu %s. Escolha outra raça." % Game.FACTIONS[race]["army"])
-		return
-	_start.rpc(randi(), race, guest_race)
+	var taken: String = room[0]["race"]
+	var free: String = Game.FACTIONS.keys().filter(func(k): return k != taken)[0]
+	room[1] = {"name": guest_name.strip_edges().left(20), "race": free, "ready": false}
+	room[0]["ready"] = false
+	status.emit("%s entrou na sala!" % room[1]["name"])
+	_add_chat("%s entrou na sala." % room[1]["name"])
+	_broadcast_room()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _change_in(change: Dictionary) -> void:
+	if role == "host" and not active:
+		_apply_change(1, change)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _chat_in(text: String) -> void:
+	if role == "host":
+		_say(1, text.strip_edges().left(200))
 
 
 @rpc("authority", "call_remote", "reliable")
-func _reject(reason: String) -> void:
-	status.emit(reason)
-	_reset()
+func _room(state: Array) -> void:
+	if role == "guest":
+		if room[0].is_empty():
+			status.emit("Você entrou na sala de %s." % state[0].get("name", "?"))
+		room = state
+		room_changed.emit()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _chat_out(line: String) -> void:
+	_add_chat(line)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _countdown(n: int) -> void:
+	countdown.emit(n)
 
 
 @rpc("authority", "call_local", "reliable")
-func _start(seed_value: int, host_race: String, guest_race: String) -> void:
+func _start(seed_value: int, races: Array, player_names: Array) -> void:
 	map_seed = seed_value
 	active = true
-	Game.player_faction = host_race
-	Game.net_factions = [host_race, guest_race]
+	waiting = true
+	_loaded = [false, false]
+	names = player_names
+	Game.player_faction = races[0]
+	Game.net_factions = races
 	Game.local_team = Game.PLAYER if role == "host" else Game.ENEMY
 	started.emit()
 	get_tree().paused = false
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+
+# ---------------------------------------------------------------- início sincronizado
+
+## Chamado pela cena da partida quando terminou de carregar.
+func scene_loaded() -> void:
+	if not active:
+		return
+	# Deixa a névoa e a barra lateral desenharem uma vez; depois congela até os dois carregarem
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if waiting:
+		get_tree().paused = true
+	if role == "host":
+		_mark_loaded(0)
+	else:
+		_loaded_in.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _loaded_in() -> void:
+	if role == "host":
+		_mark_loaded(1)
+
+
+func _mark_loaded(who: int) -> void:
+	_loaded[who] = true
+	if _loaded[0] and _loaded[1]:
+		_go.rpc()
+
+
+@rpc("authority", "call_local", "reliable")
+func _go() -> void:
+	waiting = false
+	get_tree().paused = false
+	go.emit()
 
 
 # ---------------------------------------------------------------- ordens do convidado

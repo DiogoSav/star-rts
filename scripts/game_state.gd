@@ -328,6 +328,8 @@ const CATEGORY_NAMES := {"building": "construções", "infantry": "infantaria",
 
 ## Raça escolhida no menu (persiste entre partidas). enemy_choice "" = aleatória.
 var player_faction := "hum"
+## Nome do jogador no multiplayer (persiste entre partidas)
+var player_name := ""
 ## Time controlado por este computador (no multiplayer o convidado é o time 1)
 var local_team := PLAYER
 ## Raças da partida multiplayer: [anfitrião, convidado]

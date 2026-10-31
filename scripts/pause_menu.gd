@@ -60,7 +60,7 @@ func _button(box: VBoxContainer, text: String, action: Callable) -> void:
 
 
 func open() -> void:
-	if Game.game_over:
+	if Game.game_over or Net.waiting:
 		return
 	visible = true
 	get_tree().paused = not Net.active   # no multiplayer o jogo continua rodando
