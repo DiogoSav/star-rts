@@ -97,7 +97,7 @@ func _ready() -> void:
 	_section(box, "NAVES", fac["air"])
 
 	var help := Label.new()
-	help.text = "Arrastar: selecionar   ·   Botão dir.: mover / atacar   ·   Ctrl + dir.: andar atacando   ·   WASD: câmera   ·   Esc: cancelar / pausar   ·   P: pausa   ·   F11: tela cheia"
+	help.text = "Arrastar: selecionar   ·   Botão dir.: mover / atacar   ·   Ctrl + dir.: andar atacando   ·   WASD: câmera   ·   Esc: cancelar / pausar   ·   P: pausa   ·   K: consertar prédio selecionado   ·   F11: tela cheia"
 	help.add_theme_font_size_override("font_size", 13)
 	help.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7, 0.8))
 	help.position = Vector2(16, 1080 - 30)
@@ -213,6 +213,8 @@ func _tooltip(t: String) -> String:
 	if not req.is_empty():
 		var names := req.map(func(r): return Game.item_name(r))
 		s += "\nRequer: " + ", ".join(names)
+	if Game.UNITS.has(t):
+		s += "\nClique: produzir (fila de até %d)   ·   Botão direito: cancelar um" % Game.MAX_QUEUE
 	return s
 
 
@@ -227,11 +229,12 @@ func _short_name(t: String) -> String:
 func _on_item_pressed(t: String) -> void:
 	var cat: String = Game.item_data(t)["category"]
 	var job: Dictionary = Game.production[Game.PLAYER].get(cat, {})
-	if not job.is_empty():
+	# Prédios: um por vez (depois de pronto, o clique posiciona). Unidades entram na fila.
+	if cat == "building" and not job.is_empty():
 		if job["done"] and job["type"] == t:
 			place_requested.emit(t)
 		elif job["type"] != t:
-			show_message("Já existe algo sendo produzido nesta categoria")
+			show_message("Já existe uma construção em andamento")
 		return
 	Game.start_production(Game.PLAYER, t)
 
@@ -239,9 +242,7 @@ func _on_item_pressed(t: String) -> void:
 func _on_item_gui_input(event: InputEvent, t: String) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		var cat: String = Game.item_data(t)["category"]
-		var job: Dictionary = Game.production[Game.PLAYER].get(cat, {})
-		if not job.is_empty() and job["type"] == t:
-			Game.cancel_production(Game.PLAYER, cat)
+		Game.cancel_production(Game.PLAYER, cat, t)
 
 
 func show_message(text: String) -> void:
@@ -275,6 +276,8 @@ func _process(delta: float) -> void:
 		# Um prédio já pronto continua posicionável mesmo se o produtor for destruído
 		b.disabled = not Game.can_produce(Game.PLAYER, t) and not (mine and job["done"])
 		var bar: ColorRect = bars[t]
+		var n := Game.count_in_production(Game.PLAYER, t)
+		var count := "  ×%d" % n if n > 1 else ""
 		if mine:
 			bar.visible = true
 			bar.position = Vector2(2, b.size.y - 5)
@@ -282,7 +285,10 @@ func _process(delta: float) -> void:
 			if job["done"]:
 				b.text = "%s\nPRONTO!" % _short_name(t)
 			else:
-				b.text = "%s\n%d%%" % [_short_name(t), int(job["progress"] * 100.0)]
+				b.text = "%s\n%d%%%s" % [_short_name(t), int(job["progress"] * 100.0), count]
+		elif n > 0:
+			bar.visible = false
+			b.text = "%s\nna fila%s" % [_short_name(t), count if n > 1 else "  ×1"]
 		else:
 			bar.visible = false
 			b.text = "%s\n%d" % [_short_name(t), data["cost"]]

@@ -281,8 +281,9 @@ const UNITS := {
 
 ## Os nomes dos prédios mudam por raça (FACTIONS[...]["buildings"]); estes são os genéricos.
 const BUILDINGS := {
+	# "cost" do centro de comando só entra no cálculo do conserto (ele não é construível)
 	"cy": {
-		"name": "Centro de Comando", "category": "", "cost": 0, "time": 0.0, "requires": [],
+		"name": "Centro de Comando", "category": "", "cost": 3000, "time": 0.0, "requires": [],
 		"hp": 1500, "size": Vector2i(3, 3), "power": 10, "sight": 6, "produces": "building",
 		"desc": "Centro de comando: constrói os outros prédios.",
 	},
@@ -319,6 +320,8 @@ const BUILDINGS := {
 	},
 }
 
+## Itens por categoria de unidade na produção (o ativo + a fila de espera)
+const MAX_QUEUE := 5
 const BUILD_ORDER := ["power", "refinery", "barracks", "factory", "starport", "turret"]
 const CATEGORY_NAMES := {"building": "construções", "infantry": "infantaria",
 		"vehicle": "veículos", "air": "naves"}
@@ -335,6 +338,8 @@ var fog: Fog = null
 var entities: Array = []
 ## Uma fila por time: categoria -> {"type", "progress", "done"}
 var production: Array = [{}, {}]
+## Fila de espera (já paga) depois do trabalho ativo: categoria -> [tipos]. Prédios não têm fila.
+var queues: Array = [{}, {}]
 var game_over := false
 ## Ícones dos modelos 3D, renderizados uma vez em SubViewports: nome do modelo -> textura
 var _icons := {}
@@ -428,6 +433,7 @@ func reset() -> void:
 	credits = [START_CREDITS, START_CREDITS]
 	entities = []
 	production = [{}, {}]
+	queues = [{}, {}]
 	game_over = false
 	map = null
 	world = null
@@ -540,28 +546,67 @@ func can_produce(team: int, type: String) -> bool:
 
 # ---------------------------------------------------------------- produção
 
+## Começa a produzir `type` ou, se a categoria já está ocupada, põe na fila (paga na hora).
 func start_production(team: int, type: String) -> bool:
 	var data := item_data(type)
 	var cat: String = data["category"]
-	if production[team].has(cat) or not can_produce(team, type):
+	if not can_produce(team, type):
+		return false
+	var busy: bool = production[team].has(cat)
+	if busy and (cat == "building" or queued(team, cat).size() + 1 >= MAX_QUEUE):
+		if team == PLAYER and cat != "building":
+			message.emit("Fila de produção cheia (máximo %d)" % MAX_QUEUE)
 		return false
 	if credits[team] < data["cost"]:
 		if team == PLAYER:
 			message.emit("Créditos insuficientes")
 		return false
 	credits[team] -= data["cost"]
-	production[team][cat] = {"type": type, "progress": 0.0, "done": false}
+	if busy:
+		queued(team, cat).append(type)
+	else:
+		production[team][cat] = {"type": type, "progress": 0.0, "done": false}
 	return true
 
 
-func cancel_production(team: int, cat: String) -> void:
-	if not production[team].has(cat):
+func queued(team: int, cat: String) -> Array:
+	if not queues[team].has(cat):
+		queues[team][cat] = []
+	return queues[team][cat]
+
+
+## Quantos itens de `type` estão na produção (o ativo mais os da fila).
+func count_in_production(team: int, type: String) -> int:
+	var cat: String = item_data(type)["category"]
+	var n := queued(team, cat).count(type)
+	if production[team].has(cat) and production[team][cat]["type"] == type:
+		n += 1
+	return n
+
+
+## Cancela um `type` (o último da fila; se não houver na fila, o que está sendo produzido)
+## e devolve os créditos.
+func cancel_production(team: int, cat: String, type := "") -> void:
+	var q := queued(team, cat)
+	var i := q.rfind(type) if type != "" else -1
+	if i >= 0:
+		q.remove_at(i)
+		credits[team] += item_data(type)["cost"]
+	elif production[team].has(cat) and (type == "" or production[team][cat]["type"] == type):
+		credits[team] += item_data(production[team][cat]["type"])["cost"]
+		production[team].erase(cat)
+		_next_job(team, cat)
+	else:
 		return
-	var job: Dictionary = production[team][cat]
-	credits[team] += item_data(job["type"])["cost"]
-	production[team].erase(cat)
 	if team == PLAYER:
 		message.emit("Produção cancelada")
+
+
+## Passa o próximo da fila para a produção.
+func _next_job(team: int, cat: String) -> void:
+	var q := queued(team, cat)
+	if not q.is_empty() and not production[team].has(cat):
+		production[team][cat] = {"type": q.pop_front(), "progress": 0.0, "done": false}
 
 
 func _process(delta: float) -> void:
@@ -587,6 +632,7 @@ func _process(delta: float) -> void:
 					var pos := producer.position if cat == "air" else producer.exit_position()
 					spawn_unit(job["type"], team, pos)
 					production[team].erase(cat)
+					_next_job(team, cat)
 
 
 # ---------------------------------------------------------------- criação

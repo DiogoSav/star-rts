@@ -29,6 +29,15 @@ Importe o `project.godot` no Godot 4.7 e aperte F5. No menu: **JOGAR**, escolha 
 Controles: arrastar = selecionar · botão direito = mover/atacar · Ctrl + direito = andar
 atacando · WASD/bordas = câmera · roda = zoom · Esc/P = pausa · F11 = tela cheia.
 
+**Fila de produção:** cada clique num soldado, veículo ou nave entra na fila daquela
+categoria (até 5, pagos na hora); o botão mostra quantos faltam (×3). Botão direito no item
+cancela o último da fila e devolve os créditos. Prédios continuam um por vez.
+
+**Conserto:** selecione um prédio seu danificado e clique em **Consertar** no painel (ou
+aperte **K**). Recupera 5% da vida por segundo e custa, por ponto de vida, metade do custo
+do prédio dividida pela vida máxima. É pedido prédio a prédio, nunca automático (nem pela
+IA), e para se os créditos acabarem — aí é preciso pedir de novo.
+
 ## Versão Web (navegador)
 
 O projeto exporta para HTML5/WebAssembly (preset "Web" em `export_presets.cfg`). Na Web o

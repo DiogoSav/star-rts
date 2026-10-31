@@ -19,6 +19,7 @@ var _hp_back: ColorRect
 var _hp_fill: ColorRect
 var _hp_text: Label
 var _stats: Label
+var _repair_btn: Button
 var _multi: VBoxContainer
 var _multi_title: Label
 var _grid: GridContainer
@@ -67,6 +68,13 @@ func _ready() -> void:
 	_hp_text = Label.new()
 	_hp_text.add_theme_font_size_override("font_size", 14)
 	hp_row.add_child(_hp_text)
+	# Conserto: pedido prédio a prédio (este botão ou a tecla K)
+	_repair_btn = Button.new()
+	_repair_btn.focus_mode = Control.FOCUS_NONE
+	_repair_btn.add_theme_font_size_override("font_size", 13)
+	_repair_btn.tooltip_text = "Custo por ponto de vida = metade do custo do prédio ÷ vida máxima (tecla K)"
+	_repair_btn.pressed.connect(_on_repair_pressed)
+	hp_row.add_child(_repair_btn)
 	_stats = Label.new()
 	_stats.add_theme_font_size_override("font_size", 14)
 	col.add_child(_stats)
@@ -138,6 +146,24 @@ func _process(_delta: float) -> void:
 	_hp_fill.color = Color(0.9, 0.2, 0.15) if f <= 0.25 else (Color(0.95, 0.7, 0.2) if f <= 0.5 else Color(0.45, 0.8, 0.3))
 	_hp_text.text = "Vida %d / %d" % [ceili(e.hp), int(e.max_hp)]
 	_stats.text = _building_stats(e) if e is Building else _unit_stats(e)
+	var mine: bool = e is Building and e.team == Game.PLAYER
+	_repair_btn.visible = mine and (e.repairing or e.can_repair())
+	if _repair_btn.visible:
+		_repair_btn.text = "Parar conserto" if e.repairing else "Consertar  (%d)" % e.repair_cost_total()
+
+
+func _on_repair_pressed() -> void:
+	if selection.size() != 1 or not is_instance_valid(selection[0]):
+		return
+	var b = selection[0]
+	if not (b is Building):
+		return
+	if b.repairing:
+		b.set_repairing(false)
+	elif Game.credits[b.team] < b.repair_cost_per_hp():
+		Game.message.emit("Créditos insuficientes para consertar")
+	else:
+		b.set_repairing(true)
 
 
 func _weapon_line(w: Dictionary) -> String:
@@ -169,6 +195,10 @@ func _building_stats(b: Building) -> String:
 	var lines: Array = []
 	if not b.built:
 		lines.append("Em construção: %d%%" % int(b.build_t * 100.0))
+	elif b.repairing:
+		lines.append("CONSERTANDO  ·  %.2f créditos por ponto de vida" % b.repair_cost_per_hp())
+	elif b.hp < b.max_hp and b.team == Game.PLAYER:
+		lines.append("Danificado  ·  conserto: %.2f créditos por ponto de vida" % b.repair_cost_per_hp())
 	var p: int = b.data["power"]
 	var power := ("Gera %d de energia" % p) if p > 0 else ("Consome %d de energia" % -p)
 	if p < 0 and Game.low_power(b.team):
@@ -183,6 +213,9 @@ func _building_stats(b: Building) -> String:
 		if not job.is_empty():
 			var item: String = Game.item_name(job["type"], b.team)
 			line += "  ·  %s: %s" % [item, "pronto" if job["done"] else "%d%%" % int(job["progress"] * 100.0)]
+			var waiting: int = Game.queued(b.team, cat).size()
+			if waiting > 0:
+				line += "  ·  +%d na fila" % waiting
 		lines.append(line)
 	elif b.type == "refinery":
 		lines.append("Recebe os cristais dos coletores e gera créditos")

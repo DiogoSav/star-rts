@@ -202,6 +202,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				pause_menu.open()
 		elif event.keycode == KEY_P:
 			pause_menu.open()
+		elif event.keycode == KEY_K and not Game.game_over:
+			toggle_repair_selected()
 		elif event.keycode == KEY_F11:
 			Ambience.toggle_fullscreen()
 		return
@@ -304,6 +306,23 @@ func _on_minimap_clicked(ground_pos: Vector2) -> void:
 
 
 # ---------------------------------------------------------------- construção
+
+## Liga/desliga o conserto dos prédios selecionados (tecla K ou botão no painel).
+## O conserto é sempre pedido prédio a prédio; nada é consertado automaticamente.
+func toggle_repair_selected() -> void:
+	for e in selection:
+		if not (e is Building) or e.team != Game.PLAYER:
+			continue
+		if e.repairing:
+			e.set_repairing(false)
+			hud.show_message("Conserto interrompido")
+		elif not e.can_repair():
+			hud.show_message("Este prédio não precisa de conserto")
+		else:
+			e.set_repairing(true)
+			hud.show_message("Consertando %s: %d créditos para recuperar tudo" % [
+					Game.item_name(e.type), e.repair_cost_total()])
+
 
 func _on_place_requested(type: String) -> void:
 	placing = type

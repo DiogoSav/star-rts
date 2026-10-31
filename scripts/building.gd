@@ -17,6 +17,11 @@ var _spins: Array = []
 var _dust: CPUParticles3D
 var _frame: MeshInstance3D
 var _scan: MeshInstance3D
+var _fire_fx: Array = []
+## Conserto: recupera REPAIR_RATE da vida por segundo, cobrando repair_cost_per_hp() por ponto
+const REPAIR_RATE := 0.05
+var repairing := false
+var _repair_fx: CPUParticles3D
 
 
 func setup(t: String, tm: int, c: Vector2i) -> void:
@@ -130,8 +135,12 @@ func _process(delta: float) -> void:
 	var powered := not Game.low_power(team) or int(data["power"]) > 0
 	for s in _spins:
 		s.rotation.y += delta * (0.8 if powered else 0.1)
+	if repairing:
+		_repair(delta)
 	if not _burning and hp < max_hp * 0.5:
 		_start_burning()
+	elif _burning and hp > max_hp * 0.6:
+		_stop_burning()
 	if gun != null:
 		_gun_angle = lerp_angle(_gun_angle, aim.angle(), minf(1.0, delta * 6.0))
 		gun.rotation.y = -_gun_angle
@@ -162,6 +171,57 @@ func _start_burning() -> void:
 		var s := Fx3D.smoke(true)
 		s.position = p + Vector3(0, 0.1, 0)
 		root.add_child(s)
+		_fire_fx.append_array([f, s])
+
+
+## Consertado acima de 60%: o fogo apaga (a fumaça termina de subir e some).
+func _stop_burning() -> void:
+	_burning = false
+	for p in _fire_fx:
+		p.emitting = false
+		get_tree().create_timer(p.lifetime + 0.2).timeout.connect(p.queue_free)
+	_fire_fx.clear()
+
+
+## Custo por ponto de vida: metade do custo do prédio dividida pela vida máxima.
+func repair_cost_per_hp() -> float:
+	return float(data["cost"]) * 0.5 / max_hp
+
+
+## Custo para consertar tudo o que falta agora.
+func repair_cost_total() -> int:
+	return ceili((max_hp - hp) * repair_cost_per_hp())
+
+
+func can_repair() -> bool:
+	return built and not dead and hp < max_hp
+
+
+func set_repairing(on: bool) -> void:
+	repairing = on and can_repair()
+	if repairing and _repair_fx == null:
+		_repair_fx = Fx3D.sparks(Vector2(size) * 0.6, Color(0.4, 1.0, 0.55))
+		_repair_fx.amount = 24
+		_repair_fx.position.y = box.end.y * 0.6
+		root.add_child(_repair_fx)
+	if _repair_fx != null:
+		_repair_fx.emitting = repairing
+
+
+func _repair(delta: float) -> void:
+	var amount := minf(max_hp * REPAIR_RATE * delta, max_hp - hp)
+	var cost := amount * repair_cost_per_hp()
+	if Game.credits[team] < cost:
+		# Sem créditos o conserto para; o jogador precisa pedir de novo
+		set_repairing(false)
+		if team == Game.PLAYER:
+			Game.message.emit("Créditos insuficientes: conserto interrompido")
+		return
+	Game.credits[team] -= cost
+	hp += amount
+	if hp >= max_hp:
+		hp = max_hp
+		set_repairing(false)
 
 
 func die() -> void:

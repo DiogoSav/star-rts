@@ -53,6 +53,13 @@ func _draw() -> void:
 			continue
 		if e.selected or e.hp < e.max_hp:
 			_bar(p, w, clampf(e.hp / e.max_hp, 0.0, 1.0), _hp_color(e.hp / e.max_hp))
+		if e is Building and e.repairing:
+			# "+" verde pulsando ao lado da barra: prédio em conserto
+			var c := Vector2(p.x - w / 2.0 - 10.0, p.y + 1.0)
+			var s := 5.0 * k * (1.0 + 0.2 * sin(_t * 8.0))
+			var col := Color(0.4, 1.0, 0.5, 0.7 + 0.3 * sin(_t * 8.0))
+			draw_rect(Rect2(c - Vector2(s, s * 0.35), Vector2(s * 2.0, s * 0.7)), col)
+			draw_rect(Rect2(c - Vector2(s * 0.35, s), Vector2(s * 0.7, s * 2.0)), col)
 		if e is Harvester and e.cargo > 0.0:
 			_bar(p + Vector2(0, 5), w, e.cargo / Harvester.CAPACITY, Color(0.65, 0.35, 1.0))
 
