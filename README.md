@@ -1,5 +1,8 @@
 # Star-RTS
 
+**▶ Jogue no navegador: https://diogosav.github.io/star-rts/**
+(PC com teclado e mouse; o primeiro clique dá foco ao jogo)
+
 RTS espacial em 3D (Godot 4.7, Forward+) feito a partir das mecânicas do Mini RTS 3D.
 Três raças disputam um planeta alienígena rico em cristais:
 
@@ -37,10 +40,13 @@ Godot_console --headless --path . --export-release "Web" web/index.html
 node tools/serve_web.js 8060      (depois abra http://localhost:8060)
 ```
 
-A pasta `web/` (cerca de 46 MB) pode ser publicada como site estático: no itch.io (envie
-um .zip com o conteúdo de `web/` e marque "This file will be played in the browser") ou no
-GitHub Pages. A exportação é sem threads, então não precisa de cabeçalhos especiais.
-Abrir o `index.html` direto do disco não funciona: precisa de um servidor HTTP.
+A exportação é sem threads, então funciona em qualquer hospedagem estática sem cabeçalhos
+especiais. Abrir o `index.html` direto do disco não funciona: precisa de um servidor HTTP.
+Na Web a câmera anda só pelo WASD/setas (sem rolagem pelas bordas).
+
+**Publicação:** o site é a branch `gh-pages` deste repositório (GitHub Pages). Para
+republicar depois de exportar de novo, copie o conteúdo de `web/` para uma cópia da branch
+`gh-pages`, faça commit e `git push origin gh-pages`; o Pages atualiza em 1–2 minutos.
 
 ## Mecânicas novas em relação ao Mini RTS 3D
 
