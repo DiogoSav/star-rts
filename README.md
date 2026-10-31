@@ -80,8 +80,10 @@ especiais. Abrir o `index.html` direto do disco não funciona: precisa de um ser
 Na Web a câmera anda só pelo WASD/setas (sem rolagem pelas bordas).
 
 **Publicação:** o site é a branch `gh-pages` deste repositório (GitHub Pages). Para
-republicar depois de exportar de novo, copie o conteúdo de `web/` para uma cópia da branch
-`gh-pages`, faça commit e `git push origin gh-pages`; o Pages atualiza em 1–2 minutos.
+republicar: exporte, rode `node tools/cache_bust.js` (carimba uma versão nos endereços do
+jogo para os navegadores não usarem a cópia antiga), copie o conteúdo de `web/` para uma
+cópia da branch `gh-pages`, faça commit e `git push origin gh-pages`. O Pages atualiza em
+1–2 minutos; quem estava com o site aberto pode precisar de Ctrl+F5.
 
 ## Mecânicas novas em relação ao Mini RTS 3D
 
