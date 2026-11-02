@@ -359,6 +359,29 @@ def turret(name):
     return m
 
 
+def medic(name):
+    """Doca de Reparo: plataforma hexagonal com braços-solda e anel de campo giratório."""
+    m = Model(name, P)
+    b = m.body
+    _base(b, 1.9, 1.9)
+    b.prism((0, 0, 0.12), [(0.75 * math.cos(a), 0.75 * math.sin(a)) for a in
+                           [i * math.pi / 3 for i in range(6)]], 0.22, "hull", taper=0.9, bev=0.03)
+    b.prism((0, 0, 0.24), [(0.55 * math.cos(a), 0.55 * math.sin(a)) for a in
+                           [i * math.pi / 3 for i in range(6)]], 0.02, "dark")
+    b.torus((0, 0, 0.26), 0.45, 0.02, "glow", seg=6, seg2=4)
+    for i in range(3):
+        a = i * 2 * math.pi / 3 + math.pi / 6
+        x, y = math.cos(a) * 0.72, math.sin(a) * 0.72
+        _pylon(b, x, y, 0.55, 0.07)
+        b.tube((x, y, 0.75), (x * 0.35, y * 0.35, 0.9), 0.035, "metal")
+        b.sphere((x * 0.35, y * 0.35, 0.9), 0.045, "glow")
+    b.sphere((0, 0, 0.45), 0.13, "glow", seg=20, rings=12)
+    s = m.group("spin", (0, 0, 0.62))
+    s.torus((0, 0, 0.62), 0.32, 0.025, "team", seg=6, seg2=4)
+    s.torus((0, 0, 0.62), 0.22, 0.018, "metal", seg=6, seg2=4, rot=(25, 0, 0))
+    return m
+
+
 def all_models():
     out = []
     for k in ("rifle", "smg", "mg", "at", "sniper"):
@@ -366,5 +389,6 @@ def all_models():
     out += [harvester("rob_harvester"), spider("rob_scout"), tank("rob_tank"),
             colossus("rob_heavy"), fighter("rob_fighter"), gunship("rob_gunship")]
     out += [cy("cy_rob"), power("power_rob"), refinery("refinery_rob"), barracks("barracks_rob"),
-            factory("factory_rob"), starport("starport_rob"), turret("turret_rob")]
+            factory("factory_rob"), starport("starport_rob"), turret("turret_rob"),
+            medic("medic_rob")]
     return out

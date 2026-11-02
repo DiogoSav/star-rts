@@ -208,6 +208,7 @@ func _setup_bases() -> void:
 	Game.spawn_building("turret", E, Map.fit(Vector2i(49, 14), E_CORNER))
 	Game.spawn_building("turret", E, Map.fit(Vector2i(54, 14), E_CORNER))
 	Game.spawn_building("starport", E, Map.fit(Vector2i(48, 6), E_CORNER))
+	Game.spawn_building("medic", E, Map.fit(Vector2i(49, 10), E_CORNER))
 	for i in 2:
 		Game.spawn_unit(ef["infantry"][i], E, map.cell_center(Map.fit(Vector2i(52 + i, 15), E_CORNER)))
 
@@ -443,6 +444,8 @@ func _update_ghost() -> void:
 			_ghost_area.position.y = 0.03
 			_ghost_area.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			_ghost.add_child(_ghost_area)
+			if Game.BUILDINGS[placing].has("heal"):
+				_ghost.add_child(Building.range_ring(float(Game.BUILDINGS[placing]["heal"]["range"])))
 			add_child(_ghost)
 	if _ghost == null:
 		return

@@ -199,8 +199,12 @@ func _building_stats(b: Building) -> String:
 		lines.append("CONSERTANDO  ·  %.2f créditos por ponto de vida" % b.repair_cost_per_hp())
 	elif b.hp < b.max_hp and b.team == Game.local_team:
 		lines.append("Danificado  ·  conserto: %.2f créditos por ponto de vida" % b.repair_cost_per_hp())
+	if b.data.has("heal"):
+		var h: Dictionary = b.data["heal"]
+		lines.append("Cura %d%% da vida por segundo  ·  alcance %d células" % [
+				roundi(float(h["rate"]) * 100.0), roundi(float(h["range"]) / Game.TILE)])
 	var p: int = b.data["power"]
-	var power := ("Gera %d de energia" % p) if p > 0 else ("Consome %d de energia" % -p)
+	var power :=("Gera %d de energia" % p) if p > 0 else ("Consome %d de energia" % -p)
 	if p < 0 and Game.low_power(b.team):
 		power += "  ·  SEM ENERGIA SUFICIENTE"
 	lines.append(power)

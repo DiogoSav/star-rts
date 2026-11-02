@@ -160,6 +160,26 @@ static func sparks(area: Vector2, color: Color) -> CPUParticles3D:
 	return p
 
 
+## Brilho verde subindo de uma unidade que está sendo curada (dispara uma vez e se apaga).
+static func heal_burst(size: float) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.explosiveness = 0.6
+	p.amount = 8
+	p.lifetime = 0.9
+	p.mesh = _particle_quad(0.1, true)
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = size
+	p.direction = Vector3.UP
+	p.spread = 15.0
+	p.gravity = Vector3.ZERO
+	p.initial_velocity_min = 0.4
+	p.initial_velocity_max = 0.8
+	p.scale_amount_curve = _grow(1.0, 0.3)
+	p.color_ramp = _ramp(Color(0.5, 1.0, 0.55), Color(0.3, 1.0, 0.4, 0.0))
+	return p
+
+
 ## Plano holográfico que sobe enquanto o prédio é construído.
 static func scan_plane(area: Vector2, color: Color) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()

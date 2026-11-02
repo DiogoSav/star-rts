@@ -434,6 +434,29 @@ def turret(name):
     return m
 
 
+def medic(name):
+    """Estação Médica: prédio baixo com cúpula de vidro e emissor de nanorreparo giratório."""
+    m = Model(name, P)
+    b = m.body
+    _pad(b, 1.9, 1.9)
+    b.box((0, 0.25, 0.28), (1.5, 0.95, 0.46), "hull", bev=0.08, taper=(0.92, 0.9))
+    b.sphere((-0.35, 0.3, 0.55), (0.34, 0.34, 0.22), "glass")
+    b.box((0.35, 0.3, 0.62), (0.18, 0.5, 0.06), "glow")     # cruz no telhado
+    b.box((0.35, 0.3, 0.62), (0.5, 0.18, 0.06), "glow")
+    b.sym("box", (0.76, 0.25, 0.28), (0.02, 0.7, 0.08), "team")
+    _windows(b, 0.0, -0.23, 0.35, 4, 0.3, w=0.14)
+    # Plataforma de atendimento com o emissor
+    b.cyl((0.0, -0.55, 0.06), 0.38, 0.06, "dark", seg=28)
+    b.torus((0.0, -0.55, 0.1), 0.36, 0.02, "glow", seg=32, seg2=6)
+    b.cyl((0.0, -0.55, 0.4), 0.05, 0.6, "metal", seg=12)
+    s = m.group("spin", (0.0, -0.55, 0.75))
+    s.cyl((0.0, -0.55, 0.75), 0.16, 0.05, "hull", seg=20)
+    s.box((0.0, -0.55, 0.75), (0.06, 0.62, 0.03), "accent")
+    s.box((0.0, -0.55, 0.75), (0.62, 0.06, 0.03), "accent")
+    s.sphere((0.0, -0.55, 0.82), 0.07, "glow")
+    return m
+
+
 def all_models():
     out = []
     for k in ("rifle", "smg", "mg", "at", "sniper"):
@@ -441,5 +464,6 @@ def all_models():
     out += [harvester("hum_harvester"), scout("hum_scout"), tank("hum_tank"),
             heavy_tank("hum_heavy"), fighter("hum_fighter"), gunship("hum_gunship")]
     out += [cy("cy_hum"), power("power_hum"), refinery("refinery_hum"), barracks("barracks_hum"),
-            factory("factory_hum"), starport("starport_hum"), turret("turret_hum")]
+            factory("factory_hum"), starport("starport_hum"), turret("turret_hum"),
+            medic("medic_hum")]
     return out

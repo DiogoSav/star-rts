@@ -41,7 +41,7 @@ const FACTIONS := {
 		"buildings": {
 			"cy": "Centro de Comando", "power": "Reator de Fusão", "refinery": "Refinaria de Cristal",
 			"barracks": "Quartel", "factory": "Fábrica de Blindados", "starport": "Hangar Orbital",
-			"turret": "Torre de Defesa",
+			"turret": "Torre de Defesa", "medic": "Estação Médica",
 		},
 	},
 	"rob": {
@@ -56,6 +56,7 @@ const FACTIONS := {
 			"cy": "Núcleo Central", "power": "Matriz de Energia", "refinery": "Processador de Cristal",
 			"barracks": "Montadora de Droides", "factory": "Forja Mecânica",
 			"starport": "Plataforma Gravitacional", "turret": "Torre de Raios",
+			"medic": "Doca de Reparo",
 		},
 	},
 	"ins": {
@@ -69,7 +70,7 @@ const FACTIONS := {
 		"buildings": {
 			"cy": "Colmeia-Mãe", "power": "Nódulo Vital", "refinery": "Digestor de Cristal",
 			"barracks": "Incubadora", "factory": "Casulo Profundo", "starport": "Ninho Aéreo",
-			"turret": "Espinho Ácido",
+			"turret": "Espinho Ácido", "medic": "Poço de Regeneração",
 		},
 	},
 }
@@ -318,6 +319,13 @@ const BUILDINGS := {
 		"desc": "Defesa contra solo e naves. Precisa de energia.",
 		"weapon": {"damage": 28, "range": 175.0, "cooldown": 1.3, "type": "cannon", "air": true},
 	},
+	## Cura: "range" em pixels de chão, "rate" = fração da vida máxima recuperada por segundo
+	"medic": {
+		"name": "Estação de Cura", "category": "building", "cost": 700, "time": 9.0,
+		"requires": ["barracks"], "hp": 500, "size": Vector2i(2, 2), "power": -25, "sight": 5,
+		"produces": "", "heal": {"range": 160.0, "rate": 0.03},
+		"desc": "Recupera a vida das suas unidades em volta (soldados, veículos e naves). Precisa de energia.",
+	},
 }
 
 ## Itens por categoria de unidade na produção (o ativo + a fila de espera)
@@ -329,7 +337,7 @@ const POP_COST := {"rifle": 1, "smg": 1, "mg": 1, "at": 1, "sniper": 1,
 const POP_BASE := 30
 const POP_PER_POWER := 20
 const POP_MAX := 100
-const BUILD_ORDER := ["power", "refinery", "barracks", "factory", "starport", "turret"]
+const BUILD_ORDER := ["power", "refinery", "barracks", "factory", "starport", "turret", "medic"]
 const CATEGORY_NAMES := {"building": "construções", "infantry": "infantaria",
 		"vehicle": "veículos", "air": "naves"}
 ## Tamanhos de mapa: escala sobre o mapa pequeno (64×48 células)

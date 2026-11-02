@@ -33,6 +33,12 @@ atacando · WASD/bordas = câmera · roda = zoom · Esc/P = pausa · F11 = tela 
 categoria (até 5, pagos na hora); o botão mostra quantos faltam (×3). Botão direito no item
 cancela o último da fila e devolve os créditos. Prédios continuam um por vez.
 
+**Estação de cura** (Estação Médica / Doca de Reparo / Poço de Regeneração; 700 créditos,
+requer Quartel): suas unidades num raio de 5 células — soldados, veículos e naves — recuperam
+3% da vida por segundo, de graça. Precisa de energia; várias estações juntas não somam. Com
+o prédio selecionado (ou ao posicioná-lo) um círculo verde mostra o alcance. A IA já começa
+com uma. Ajuste em `BUILDINGS["medic"]["heal"]` (`scripts/game_state.gd`).
+
 **Som:** três controles de volume em **OPÇÕES** (menu principal) e na pausa — **Efeitos**
 (unidades, combate e interface), **Ambiente** (vento, cristais, geradores, fogo, trovões) e
 **Música** (menu, partida e combate, que entra sozinha quando a batalha esquenta). Os volumes

@@ -358,6 +358,25 @@ def turret(name):
     return m
 
 
+def medic(name):
+    """Poço de Regeneração: lago de seiva brilhante cercado por costelas e bolsas de gosma."""
+    m = Model(name, P)
+    b = m.body
+    _creep(b, 1.9, 1.9)
+    b.torus((0, 0, 0.1), 0.62, 0.14, "flesh", seg=32, seg2=8)
+    b.cyl((0, 0, 0.1), 0.6, 0.04, "glow", seg=32)
+    b.sphere((0, 0, 0.14), (0.3, 0.3, 0.06), "glow")
+    for i in range(5):
+        a = i * 2 * math.pi / 5 + 0.3
+        b.tube((math.cos(a) * 0.8, math.sin(a) * 0.8, 0.02),
+               (math.cos(a) * 0.1, math.sin(a) * 0.1, 0.9), 0.05, "bone", r2=0.015)
+    b.torus((0, 0, 0.32), 0.66, 0.04, "team", seg=24, seg2=6)
+    b.sphere((0, 0, 0.88), (0.14, 0.14, 0.17), "chitin")
+    b.cone((0, 0, 0.55), 0.04, 0.3, "glow", seg=10, rot=(180, 0, 0))   # gota de seiva
+    _pods(b, [(0.75, 0.65, 0.12), (-0.8, 0.6, 0.12), (0.7, -0.7, 0.12)], 0.12)
+    return m
+
+
 def all_models():
     out = []
     for k in ("rifle", "smg", "mg", "at", "sniper"):
@@ -365,5 +384,6 @@ def all_models():
     out += [harvester("ins_harvester"), runner("ins_scout"), beetle("ins_tank"),
             behemoth("ins_heavy"), wasp("ins_fighter"), leviathan("ins_gunship")]
     out += [cy("cy_ins"), power("power_ins"), refinery("refinery_ins"), barracks("barracks_ins"),
-            factory("factory_ins"), starport("starport_ins"), turret("turret_ins")]
+            factory("factory_ins"), starport("starport_ins"), turret("turret_ins"),
+            medic("medic_ins")]
     return out

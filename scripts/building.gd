@@ -24,6 +24,11 @@ var _fire_snd: AudioStreamPlayer3D
 const REPAIR_RATE := 0.05
 var repairing := false
 var _repair_fx: CPUParticles3D
+## Cura em área (prédios com "heal"): a cada HEAL_TICK as unidades do time em volta recuperam vida
+const HEAL_TICK := 1.0
+const HEAL_COLOR := Color(0.35, 1.0, 0.5)
+var _heal_t := 0.0
+var _range_ring: MeshInstance3D
 
 
 func setup(t: String, tm: int, c: Vector2i) -> void:
@@ -56,6 +61,16 @@ func setup(t: String, tm: int, c: Vector2i) -> void:
 	sel_ring = Fx3D.ring(half, 0.07, Color(0.75, 0.95, 1.0, 0.95), true)
 	sel_ring.visible = selected
 	root.add_child(sel_ring)
+	if data.has("heal"):
+		_range_ring = range_ring(float(data["heal"]["range"]))
+		_range_ring.visible = false
+		root.add_child(_range_ring)
+
+
+## Círculo no chão mostrando o alcance da cura (também usado no fantasma ao posicionar).
+static func range_ring(range_px: float) -> MeshInstance3D:
+	var r := range_px * Game.UNIT
+	return Fx3D.ring(Vector2(r, r), 0.06, Color(HEAL_COLOR, 0.55))
 
 
 ## Começa a obra: o prédio é "impresso" de baixo para cima por um feixe holográfico,
@@ -146,6 +161,12 @@ func _process(delta: float) -> void:
 		s.rotation.y += delta * (0.8 if powered else 0.1)
 	if repairing and not Net.is_client():
 		_repair(delta)
+	if _range_ring != null:
+		_range_ring.visible = selected
+		_heal_t -= delta
+		if _heal_t <= 0.0:
+			_heal_t = HEAL_TICK
+			_heal_area()
 	if not _burning and hp < max_hp * 0.5:
 		_start_burning()
 	elif _burning and hp > max_hp * 0.6:
@@ -195,6 +216,31 @@ func _stop_burning() -> void:
 	if _fire_snd != null:
 		_fire_snd.queue_free()
 		_fire_snd = null
+
+
+## Cura as unidades do time dentro do alcance. Várias estações não se somam: cada unidade
+## é curada no máximo uma vez por HEAL_TICK. No convidado só mostra o brilho (a vida vem
+## nos snapshots do anfitrião).
+func _heal_area() -> void:
+	if Game.game_over or Game.low_power(team):
+		return
+	var heal: Dictionary = data["heal"]
+	var r2: float = float(heal["range"]) ** 2
+	var now := Time.get_ticks_msec()
+	for e in Game.entities:
+		if not (e is Unit) or e.team != team or e.dead or e.hp >= e.max_hp:
+			continue
+		if e.position.distance_squared_to(position) > r2 or now - e.healed_at < HEAL_TICK * 900.0:
+			continue
+		e.healed_at = now
+		if not Net.is_client():
+			e.hp = minf(e.max_hp, e.hp + e.max_hp * float(heal["rate"]) * HEAL_TICK)
+		if e.visible:
+			var fx := Fx3D.heal_burst(maxf(e.box.size.x, e.box.size.z) * 0.35)
+			Game.world.add_child(fx)
+			fx.global_position = e.center3d()
+			fx.emitting = true
+			fx.finished.connect(fx.queue_free)
 
 
 ## Custo por ponto de vida: metade do custo do prédio dividida pela vida máxima.

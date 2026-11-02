@@ -7,6 +7,7 @@ var path := PackedVector2Array()
 var path_index := 0
 var facing := 0.0
 var forced_target := false   # ataque ordenado diretamente
+var healed_at := -100000      # última cura recebida (ms), para estações não se somarem
 var attack_move := false     # andar atacando o que encontrar
 var attack_goal := Vector2.ZERO
 var guarding := false         # perseguindo por conta própria; volta para guard_pos depois
