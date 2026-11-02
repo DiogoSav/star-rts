@@ -33,6 +33,13 @@ atacando · WASD/bordas = câmera · roda = zoom · Esc/P = pausa · F11 = tela 
 categoria (até 5, pagos na hora); o botão mostra quantos faltam (×3). Botão direito no item
 cancela o último da fila e devolve os créditos. Prédios continuam um por vez.
 
+**População:** cada unidade ocupa espaço — soldado 1; coletor, batedor e caça 2; tanque 3;
+pesado e nave pesada 4. O limite começa em 30 e cada gerador de energia pronto soma 20, até
+o máximo de 100. Unidades na fila já reservam o espaço; sem espaço, os botões ficam
+bloqueados. O HUD mostra "População usada / limite · livre" e quantos soldados, veículos e
+naves você tem (e quantos estão na fila). O máximo de 100 mantém o multiplayer leve no
+navegador.
+
 **Conserto:** selecione um prédio seu danificado e clique em **Consertar** no painel (ou
 aperte **K**). Recupera 5% da vida por segundo e custa, por ponto de vida, metade do custo
 do prédio dividida pela vida máxima. É pedido prédio a prédio, nunca automático (nem pela

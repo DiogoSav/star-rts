@@ -14,6 +14,8 @@ const PANEL := Color(0.03, 0.05, 0.08, 0.93)
 
 var credits_label: Label
 var power_label: Label
+var pop_label: Label
+var army_label: Label
 var msg_label: Label
 var end_label: Label
 var minimap: Minimap
@@ -92,6 +94,21 @@ func _ready() -> void:
 	power_label = Label.new()
 	power_label.add_theme_font_size_override("font_size", 15)
 	row.add_child(power_label)
+	# População: em uso / limite (e quanto ainda cabe) + o que já tem em campo
+	pop_label = Label.new()
+	pop_label.add_theme_font_size_override("font_size", 15)
+	pop_label.mouse_filter = Control.MOUSE_FILTER_STOP
+	pop_label.clip_text = true
+	pop_label.tooltip_text = ("População: soldado 1 · coletor, batedor e caça 2 · tanque 3 · pesado e nave pesada 4.\n"
+			+ "Limite: %d no início, +%d por gerador de energia pronto, máximo %d.\n"
+			+ "Unidades na fila já reservam o espaço.") % [Game.POP_BASE, Game.POP_PER_POWER, Game.POP_MAX]
+	box.add_child(pop_label)
+	army_label = Label.new()
+	army_label.add_theme_font_size_override("font_size", 13)
+	army_label.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+	army_label.clip_text = true
+	army_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	box.add_child(army_label)
 
 	_section(box, "CONSTRUÇÕES", Game.BUILD_ORDER)
 	_section(box, "INFANTARIA", fac["infantry"])
@@ -206,11 +223,38 @@ func _item_icon(t: String) -> Texture2D:
 	return Game.icon(t)
 
 
+## "População 24 / 60 · livre 36" e o que já está em campo, por tipo.
+func _update_population() -> void:
+	var T := Game.local_team
+	var used := Game.pop_used(T)
+	var cap := Game.pop_cap(T)
+	var free := maxi(cap - used, 0)
+	pop_label.text = "População  %d / %d   ·   livre %d" % [used, cap, free]
+	var col := Color(0.65, 0.85, 0.45)
+	if free == 0:
+		col = Color(0.95, 0.35, 0.25)
+	elif free < 6:
+		col = Color(0.95, 0.75, 0.3)
+	pop_label.add_theme_color_override("font_color", col)
+	var counts := {"inf": 0, "veh": 0, "air": 0}
+	for e in Game.entities:
+		if e is Unit and e.team == T and not e.dead:
+			counts[e.data["kind"]] += 1
+	var waiting := 0
+	for cat in ["infantry", "vehicle", "air"]:
+		waiting += Game.queued(T, cat).size() + (1 if Game.production[T].has(cat) else 0)
+	army_label.text = "Soldados %d · Veículos %d · Naves %d" % [counts["inf"], counts["veh"], counts["air"]]
+	if waiting > 0:
+		army_label.text += " · fila %d" % waiting
+
+
 func _tooltip(t: String) -> String:
 	var d := Game.item_data(t)
 	var s := "%s\n%s\nCusto: %d   Tempo: %ds" % [Game.item_name(t), d["desc"], d["cost"], int(d["time"])]
 	if d.has("hp"):
 		s += "   Vida: %d" % d["hp"]
+	if Game.UNITS.has(t):
+		s += "   População: %d" % Game.pop_cost(t)
 	var req: Array = d["requires"]
 	if not req.is_empty():
 		var names := req.map(func(r): return Game.item_name(r))
@@ -276,6 +320,7 @@ func _process(delta: float) -> void:
 	power_label.text = "Energia %d / %d" % [p.x, p.y]
 	power_label.add_theme_color_override("font_color",
 			Color(0.95, 0.35, 0.25) if p.y > p.x else Color(0.65, 0.85, 0.45))
+	_update_population()
 
 	for t in buttons:
 		var b: Button = buttons[t]
@@ -285,6 +330,9 @@ func _process(delta: float) -> void:
 		var mine: bool = not job.is_empty() and job["type"] == t
 		# Um prédio já pronto continua posicionável mesmo se o produtor for destruído
 		b.disabled = not Game.can_produce(Game.local_team, t) and not (mine and job["done"])
+		# sem população livre: bloqueia (mas deixa cancelar o que já está na fila)
+		if Game.UNITS.has(t) and not Game.pop_room(Game.local_team, t) and Game.count_in_production(Game.local_team, t) == 0:
+			b.disabled = true
 		var bar: ColorRect = bars[t]
 		var n := Game.count_in_production(Game.local_team, t)
 		var count := "  ×%d" % n if n > 1 else ""

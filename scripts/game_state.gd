@@ -322,6 +322,13 @@ const BUILDINGS := {
 
 ## Itens por categoria de unidade na produção (o ativo + a fila de espera)
 const MAX_QUEUE := 5
+## População: quanto cada unidade ocupa, pela função (o sufixo do id: hum_tank -> "tank").
+const POP_COST := {"rifle": 1, "smg": 1, "mg": 1, "at": 1, "sniper": 1,
+		"harvester": 2, "scout": 2, "fighter": 2, "tank": 3, "heavy": 4, "gunship": 4}
+## Limite inicial, quanto cada gerador de energia pronto acrescenta, e o máximo absoluto
+const POP_BASE := 30
+const POP_PER_POWER := 20
+const POP_MAX := 100
 const BUILD_ORDER := ["power", "refinery", "barracks", "factory", "starport", "turret"]
 const CATEGORY_NAMES := {"building": "construções", "infantry": "infantaria",
 		"vehicle": "veículos", "air": "naves"}
@@ -558,10 +565,55 @@ func can_produce(team: int, type: String) -> bool:
 	return producer_for(team, cat) != null and requirements_met(team, type)
 
 
+# ---------------------------------------------------------------- população
+
+func pop_cost(type: String) -> int:
+	return POP_COST.get(type.get_slice("_", 1), 1) if UNITS.has(type) else 0
+
+
+## População em uso: unidades vivas mais as que estão sendo produzidas ou na fila
+## (a fila já reserva o espaço).
+func pop_used(team: int) -> int:
+	var n := 0
+	for e in entities:
+		if e is Unit and e.team == team and not e.dead:
+			n += pop_cost(e.type)
+	return n + pop_reserved(team)
+
+
+func pop_reserved(team: int) -> int:
+	var n := 0
+	for cat in ["infantry", "vehicle", "air"]:
+		if production[team].has(cat):
+			n += pop_cost(production[team][cat]["type"])
+		for t in queued(team, cat):
+			n += pop_cost(t)
+	return n
+
+
+func pop_cap(team: int) -> int:
+	var powers := 0
+	for e in entities:
+		if e is Building and e.team == team and e.type == "power" and e.built:
+			powers += 1
+	return mini(POP_MAX, POP_BASE + powers * POP_PER_POWER)
+
+
+## Cabe mais um `type` na população?
+func pop_room(team: int, type: String) -> bool:
+	return pop_used(team) + pop_cost(type) <= pop_cap(team)
+
+
 # ---------------------------------------------------------------- produção
 
 ## Começa a produzir `type` ou, se a categoria já está ocupada, põe na fila (paga na hora).
 func start_production(team: int, type: String) -> bool:
+	if UNITS.has(type) and not pop_room(team, type):
+		var msg := "Limite de população: %d / %d" % [pop_used(team), pop_cap(team)]
+		if pop_cap(team) < POP_MAX:
+			msg += " — construa mais %s (+%d cada)" % [item_name("power", team), POP_PER_POWER]
+		notify(team, msg)
+		return false
 	if Net.is_client():
 		Net.order("produce", [type])
 		return true
