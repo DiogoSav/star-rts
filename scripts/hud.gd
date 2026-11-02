@@ -273,6 +273,7 @@ func _short_name(t: String) -> String:
 
 
 func _on_item_pressed(t: String) -> void:
+	Sfx.ui("click")
 	var cat: String = Game.item_data(t)["category"]
 	var job: Dictionary = Game.production[Game.local_team].get(cat, {})
 	# Prédios: um por vez (depois de pronto, o clique posiciona). Unidades entram na fila.
@@ -282,7 +283,8 @@ func _on_item_pressed(t: String) -> void:
 		elif job["type"] != t:
 			show_message("Já existe uma construção em andamento")
 		return
-	Game.start_production(Game.local_team, t)
+	if not Game.start_production(Game.local_team, t):
+		Sfx.ui("error")
 
 
 func _on_item_gui_input(event: InputEvent, t: String) -> void:

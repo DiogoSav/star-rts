@@ -627,4 +627,6 @@ func _spawn_mirror(id: int, type: String, team: int, ents: PackedFloat32Array, k
 	else:
 		return null
 	Game.set_net_id(e, id)
+	if e is Unit and team == Game.local_team and not waiting:
+		Sfx.ui("ready")
 	return e

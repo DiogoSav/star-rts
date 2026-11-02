@@ -33,6 +33,15 @@ atacando · WASD/bordas = câmera · roda = zoom · Esc/P = pausa · F11 = tela 
 categoria (até 5, pagos na hora); o botão mostra quantos faltam (×3). Botão direito no item
 cancela o último da fila e devolve os créditos. Prédios continuam um por vez.
 
+**Som:** três controles de volume em **OPÇÕES** (menu principal) e na pausa — **Efeitos**
+(unidades, combate e interface), **Ambiente** (vento, cristais, geradores, fogo, trovões) e
+**Música** (menu, partida e combate, que entra sozinha quando a batalha esquenta). Os volumes
+ficam salvos. Cada raça soa diferente: Legião Solar militar e mecânica (lasers, motores,
+rádio), Núcleo Sintético eletrônico (lasers de theremin, vozes de robô, servos) e Enxame
+Kheth orgânico (cuspes, gosma, estalos, asas). Os sons estão em `sounds/<grupo>/<evento>_<n>`
+(o jogo monta o banco sozinho; para trocar um som basta substituir o arquivo) e são todos
+CC0 — origem em `sounds/CREDITOS.md`. Os sintetizados vêm de `art_src/sound/synth.gd`.
+
 **Tamanho do mapa:** Pequeno (64×48 células), Médio (86×65, 35% maior) e Grande (102×77,
 60% maior). No modo individual escolhe-se na tela de raça; no multiplayer o anfitrião escolhe
 na sala de espera (o convidado vê a escolha; mudar o mapa desmarca o PRONTO dos dois). As

@@ -19,6 +19,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 
 Game="*res://scripts/game_state.gd"
 Net="*res://scripts/net.gd"
+Sfx="*res://scripts/sound.gd"
 
 [display]
 

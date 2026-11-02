@@ -89,6 +89,7 @@ var title_page: VBoxContainer
 var faction_page: VBoxContainer
 var mp_page: VBoxContainer
 var room_page: VBoxContainer
+var options_page: VBoxContainer
 var _race_buttons := {}
 var _name_edit: LineEdit
 var _code_edit: LineEdit
@@ -128,10 +129,12 @@ func _ready() -> void:
 	buttons.add_child(_menu_button("JOGAR CONTRA A IA", func(): _show_page(faction_page)))
 	if Net.available():
 		buttons.add_child(_menu_button("MULTIPLAYER  (1 × 1)", func(): _show_page(mp_page)))
+	buttons.add_child(_menu_button("OPÇÕES", func(): _show_page(options_page)))
 	if not OS.has_feature("web"):   # no navegador o jogo não pode fechar a aba
 		buttons.add_child(_menu_button("SAIR", func(): get_tree().quit()))
 
 	_build_mp_page()
+	_build_options_page()
 
 	faction_page = _page()
 	_title(faction_page, "escolha a sua raça")
@@ -179,6 +182,7 @@ func _ready() -> void:
 	faction_page.add_child(back)
 
 	add_child(Ambience.new())
+	Sfx.music("menu")
 
 
 # ---------------------------------------------------------------- fundo 3D
@@ -334,6 +338,20 @@ func _title(page: VBoxContainer, subtitle: String) -> void:
 	sub.add_theme_font_size_override("font_size", 24)
 	sub.add_theme_color_override("font_color", Color(0.65, 0.78, 0.9))
 	page.add_child(sub)
+
+
+## Opções: volume de efeitos, ambiente e música (salvos no computador).
+func _build_options_page() -> void:
+	options_page = _page()
+	_title(options_page, "opções")
+	options_page.visible = false
+	var panel := Sfx.make_volume_panel(24)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	options_page.add_child(panel)
+	var back := _menu_button("VOLTAR", func(): _show_page(title_page))
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	back.custom_minimum_size = Vector2(240, 46)
+	options_page.add_child(back)
 
 
 ## Multiplayer, 1ª tela: nome do jogador, criar uma sala ou entrar com um código.
@@ -629,6 +647,7 @@ func _show_page(page: Control, leave := true) -> void:
 	faction_page.visible = page == faction_page
 	mp_page.visible = page == mp_page
 	room_page.visible = page == room_page
+	options_page.visible = page == options_page
 	if leave and page != room_page:
 		Net.leave()
 	if page == room_page:
@@ -674,6 +693,7 @@ func _set_enemy(key: String) -> void:
 ## Botão grande no estilo do menu (também usado pelo menu de pausa).
 static func make_button(text: String) -> Button:
 	var b := Button.new()
+	b.pressed.connect(func(): Sfx.ui("click"))
 	b.text = text
 	b.custom_minimum_size = Vector2(0, 54)
 	b.focus_mode = Control.FOCUS_NONE

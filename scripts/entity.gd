@@ -147,6 +147,7 @@ func mirror_fire() -> void:
 
 
 func _shoot(deal_damage: bool) -> void:
+	Sfx.weapon(self)
 	if muzzles.size() > 1:
 		_barrel = (_barrel + 1) % muzzles.size()
 		muzzle.remove_child(flash)
@@ -168,6 +169,7 @@ func _shoot(deal_damage: bool) -> void:
 func take_damage(amount: float, weapon_type: String) -> void:
 	if dead:
 		return
+	Sfx.hit(self)
 	if Net.is_client():
 		_hit_t = 0.12   # no convidado a vida vem do anfitrião; aqui só o clarão
 		return
@@ -182,6 +184,7 @@ func die() -> void:
 	if dead:
 		return
 	dead = true
+	Sfx.death(self)
 	Game.spawn_explosion(position, radius * 1.6 + 6.0, altitude + body_height() * 0.5)
 	Game.remove_entity(self)
 	queue_free()

@@ -10,6 +10,8 @@ extends Node3D
 const P_CORNER := Vector2(0, 1)
 const E_CORNER := Vector2(1, 0)
 
+var _fields: Array = []
+var _thunder_t := 40.0
 var player_base: Vector2i
 var enemy_base: Vector2i
 
@@ -48,7 +50,8 @@ func _ready() -> void:
 	player_base = Map.fit(Vector2i(8, 38), P_CORNER)
 	enemy_base = Map.fit(Vector2i(55, 10), E_CORNER)
 	# No multiplayer os dois geram o mesmo mapa a partir da semente do anfitrião
-	map.generate(Net.map_seed if Net.active else randi(), [player_base, enemy_base], _resource_fields())
+	_fields = _resource_fields()
+	map.generate(Net.map_seed if Net.active else randi(), [player_base, enemy_base], _fields)
 	map.spawn_props(world)
 
 	fog = Fog.new()
@@ -57,6 +60,7 @@ func _ready() -> void:
 	Game.fog = fog
 
 	_setup_lights()
+	_setup_audio()
 	add_child(Tracers.new())
 
 	cam = RTSCamera.new()
@@ -167,6 +171,22 @@ func _resource_fields() -> Array:
 	return fields
 
 
+## Som: música da partida, vento contínuo, zumbido de cristais nos campos de recurso.
+func _setup_audio() -> void:
+	Sfx.music("game")
+	var wind := AudioStreamPlayer.new()
+	wind.stream = Sfx.pick("ambience/wind")
+	wind.bus = "Ambiente"
+	wind.volume_db = -12.0
+	add_child(wind)
+	wind.play()
+	for f in _fields:
+		var spot := Node3D.new()
+		spot.position = Game.to3d(map.cell_center(f[0]), 0.3)
+		world.add_child(spot)
+		Sfx.loop3d("ambience/crystal_hum", spot, -16.0, "Ambiente", 10.0 + f[1] * 2.0)
+
+
 func _setup_bases() -> void:
 	if Net.is_client():
 		return   # no convidado tudo chega pelos snapshots do anfitrião
@@ -215,7 +235,12 @@ func ground_mouse() -> Vector2:
 
 # ---------------------------------------------------------------- entrada
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	# Trovão distante de vez em quando (ambiente)
+	_thunder_t -= delta
+	if _thunder_t <= 0.0:
+		_thunder_t = randf_range(50.0, 110.0)
+		Sfx.play2d("ambience/thunder", randf_range(-14.0, -6.0), "Ambiente")
 	var alive := selection.filter(func(s): return is_instance_valid(s) and not s.dead)
 	if alive.size() != selection.size():
 		selection = alive
@@ -293,6 +318,9 @@ func _finish_selection(end: Vector2) -> void:
 				if not cam.is_position_behind(c) and rect.has_point(cam.unproject_position(c)):
 					picked.append(e)
 	_set_selection(picked)
+	var units := picked.filter(func(s): return s is Unit)
+	if not units.is_empty():
+		Sfx.selected(units[0])
 
 
 ## Entidade sob o mouse: o raio da câmera contra a caixa de cada uma.
@@ -322,6 +350,7 @@ func _command(pos: Vector2, attack_move: bool) -> void:
 	if units.is_empty():
 		return
 	var target = _entity_at()
+	Sfx.ordered(units[0], attack_move or (target != null and target.team != Game.local_team))
 	if target != null and target.team != Game.local_team:
 		if Net.is_client():
 			Net.order("attack", [units.map(func(u): return u.net_id), target.net_id])

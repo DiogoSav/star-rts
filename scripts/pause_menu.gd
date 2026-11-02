@@ -39,6 +39,10 @@ func _ready() -> void:
 	title.add_theme_font_size_override("font_size", 40)
 	title.add_theme_color_override("font_color", HUD.ACCENT)
 	box.add_child(title)
+	# Volume (efeitos, ambiente, música) também na pausa
+	var vol := Sfx.make_volume_panel(18)
+	box.add_child(vol)
+	box.add_child(HSeparator.new())
 	_button(box, "CONTINUAR", close)
 	if not Net.active:   # no multiplayer não dá para reiniciar a partida dos dois
 		_button(box, "REINICIAR PARTIDA", func():

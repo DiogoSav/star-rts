@@ -705,9 +705,13 @@ func _process(delta: float) -> void:
 				if cat == "building":
 					job["done"] = true
 					notify(team, "Construção pronta: clique no botão e posicione no mapa")
+					if team == local_team:
+						Sfx.ui("ready")
 				else:
 					var pos := producer.position if cat == "air" else producer.exit_position()
 					spawn_unit(job["type"], team, pos)
+					if team == local_team:
+						Sfx.ui("ready")
 					production[team].erase(cat)
 					_next_job(team, cat)
 
@@ -841,4 +845,6 @@ func spawn_explosion(pos: Vector2, size: float, height := 0.0, color := Color(1.
 	fx.size = size
 	fx.color = color
 	fx.visible = fog == null or fog.is_visible_at(pos)  # não revela combates na névoa
+	if fx.visible:
+		Sfx.explosion(fx.position, size)
 	world.add_child(fx)

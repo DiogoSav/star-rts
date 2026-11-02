@@ -18,6 +18,8 @@ var _dust: CPUParticles3D
 var _frame: MeshInstance3D
 var _scan: MeshInstance3D
 var _fire_fx: Array = []
+var _hum: AudioStreamPlayer3D
+var _fire_snd: AudioStreamPlayer3D
 ## Conserto: recupera REPAIR_RATE da vida por segundo, cobrando repair_cost_per_hp() por ponto
 const REPAIR_RATE := 0.05
 var repairing := false
@@ -60,6 +62,7 @@ func setup(t: String, tm: int, c: Vector2i) -> void:
 ## com faíscas e um contorno no terreno. Leva no máximo 3 segundos e só funciona depois.
 func start_construction() -> void:
 	built = false
+	Sfx.build(self)
 	build_t = 0.0
 	_build_time = 1.5 if size == Vector2i.ONE else 2.5
 	for s in _smokes:
@@ -75,7 +78,13 @@ func start_construction() -> void:
 
 
 func finish_construction() -> void:
+	var was_building := not built
 	built = true
+	if was_building and team == Game.local_team:
+		Sfx.ui("building_ready")
+	# Zumbido do gerador de energia (som de ambiente, só perto dele)
+	if type == "power" and _hum == null:
+		_hum = Sfx.loop3d("ambience/reactor", root, -14.0, "Ambiente", 14.0)
 	build_t = 1.0
 	model.position = Vector3.ZERO
 	model.scale = Vector3.ONE
@@ -162,6 +171,8 @@ func _process(delta: float) -> void:
 ## Danificado: fogo, faíscas e fumaça preta sobre o telhado.
 func _start_burning() -> void:
 	_burning = true
+	if _fire_snd == null:
+		_fire_snd = Sfx.loop3d("ambience/fire", root, -8.0, "Ambiente", 16.0)
 	var top := box.end.y
 	for i in 2:
 		var p := Vector3((i * 2 - 1) * size.x * 0.22, top * (0.85 - i * 0.15), -size.y * 0.1)
@@ -181,6 +192,9 @@ func _stop_burning() -> void:
 		p.emitting = false
 		get_tree().create_timer(p.lifetime + 0.2).timeout.connect(p.queue_free)
 	_fire_fx.clear()
+	if _fire_snd != null:
+		_fire_snd.queue_free()
+		_fire_snd = null
 
 
 ## Custo por ponto de vida: metade do custo do prédio dividida pela vida máxima.
