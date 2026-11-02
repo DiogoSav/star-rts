@@ -23,6 +23,17 @@ var _repair_btn: Button
 var _multi: VBoxContainer
 var _multi_title: Label
 var _grid: GridContainer
+## Barra de comandos: ordens para unidades, ou reciclar para prédios
+var _cmd: HBoxContainer
+var _cmd_buttons := {}
+const UNIT_COMMANDS := [
+	["move", "Mover", "M", "Anda até o ponto ignorando inimigos (ou botão direito)"],
+	["attack_move", "Atacar", "Ctrl+dir.", "Anda até o ponto atacando o que encontrar"],
+	["patrol", "Patrulha", "Q", "Vai e volta entre aqui e o ponto, atacando o que aparecer"],
+	["stop", "Parar", "X", "Para no lugar e esquece a ordem atual"],
+	["defend", "Defender", "G", "Postura: segura a posição e só atira no que estiver ao alcance"],
+	["aggressive", "Agressivo", "H", "Postura: persegue os inimigos que vê e depois volta"],
+]
 
 
 func _ready() -> void:
@@ -35,9 +46,12 @@ func _ready() -> void:
 	custom_minimum_size = Vector2(600, 150)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 8)
+	add_child(body)
 	_single = HBoxContainer.new()
 	_single.add_theme_constant_override("separation", 14)
-	add_child(_single)
+	body.add_child(_single)
 	_icon = TextureRect.new()
 	_icon.custom_minimum_size = Vector2(160, 120)
 	_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -80,7 +94,7 @@ func _ready() -> void:
 	col.add_child(_stats)
 
 	_multi = VBoxContainer.new()
-	add_child(_multi)
+	body.add_child(_multi)
 	_multi_title = Label.new()
 	_multi_title.add_theme_font_size_override("font_size", 19)
 	_multi_title.add_theme_color_override("font_color", HUD.ACCENT)
@@ -89,7 +103,61 @@ func _ready() -> void:
 	_grid.columns = 5
 	_grid.add_theme_constant_override("h_separation", 10)
 	_multi.add_child(_grid)
+
+	_cmd = HBoxContainer.new()
+	_cmd.add_theme_constant_override("separation", 6)
+	body.add_child(_cmd)
+	for c in UNIT_COMMANDS:
+		_cmd_buttons[c[0]] = _cmd_button("%s  (%s)" % [c[1], c[2]], c[3], _on_unit_command.bind(c[0]))
+	_cmd_buttons["recycle"] = _cmd_button("", "Desmonta o prédio e devolve 80% do custo (tecla Delete). Clique duas vezes para confirmar.",
+			_on_recycle_pressed)
 	visible = false
+
+
+func _cmd_button(text: String, tip: String, cb: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.tooltip_text = tip
+	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_font_size_override("font_size", 13)
+	b.pressed.connect(cb)
+	_cmd.add_child(b)
+	return b
+
+
+func _main():
+	return get_tree().current_scene
+
+
+func _on_unit_command(kind: String) -> void:
+	Sfx.ui("click")
+	if kind in ["move", "attack_move", "patrol"]:
+		_main().set_order_mode(kind)
+	else:
+		_main().unit_order(kind)
+
+
+func _on_recycle_pressed() -> void:
+	_main().recycle_selected()
+
+
+## Atualiza a barra de comandos (postura destacada, reciclar).
+func refresh() -> void:
+	var units := selection.filter(func(e): return is_instance_valid(e) and e is Unit and e.team == Game.local_team)
+	var bldg := selection.filter(func(e): return is_instance_valid(e) and e is Building and e.team == Game.local_team and e.can_recycle())
+	for c in UNIT_COMMANDS:
+		_cmd_buttons[c[0]].visible = not units.is_empty()
+	for st in ["defend", "aggressive"]:
+		var all := not units.is_empty() and units.all(func(u): return u.stance == st)
+		_cmd_buttons[st].modulate = Color(0.5, 1.0, 0.6) if all else Color.WHITE
+	var rb: Button = _cmd_buttons["recycle"]
+	rb.visible = units.is_empty() and not bldg.is_empty()
+	if rb.visible:
+		var total := 0
+		for b in bldg:
+			total += b.recycle_value()
+		rb.text = ("Confirmar reciclagem?  +%d" if _main().recycle_armed() else "Reciclar  +%d  (Del)") % total
+	_cmd.visible = rb.visible or not units.is_empty()
 
 
 func set_selection(list: Array) -> void:
@@ -106,6 +174,7 @@ func set_selection(list: Array) -> void:
 		_sub.text = "%s  ·  %s" % [kind, fac["army"]]
 	elif list.size() > 1:
 		_build_groups()
+	refresh()
 
 
 func _build_groups() -> void:
@@ -138,6 +207,8 @@ func _build_groups() -> void:
 
 
 func _process(_delta: float) -> void:
+	if visible:
+		refresh()
 	if selection.size() != 1 or not is_instance_valid(selection[0]):
 		return
 	var e = selection[0]
@@ -199,6 +270,8 @@ func _building_stats(b: Building) -> String:
 		lines.append("CONSERTANDO  ·  %.2f créditos por ponto de vida" % b.repair_cost_per_hp())
 	elif b.hp < b.max_hp and b.team == Game.local_team:
 		lines.append("Danificado  ·  conserto: %.2f créditos por ponto de vida" % b.repair_cost_per_hp())
+	if b.team == Game.local_team and b.produces_units():
+		lines.append("Botão direito no mapa: ponto de reunião" + ("  (marcado)" if b.has_rally else ""))
 	if b.data.has("heal"):
 		var h: Dictionary = b.data["heal"]
 		lines.append("Cura %d%% da vida por segundo  ·  alcance %d células" % [

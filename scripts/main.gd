@@ -32,6 +32,13 @@ var _ghost: Node3D
 var _ghost_type := ""
 var _ghost_area: MeshInstance3D
 var _last_ground := Vector2.ZERO
+## Ordem esperando o clique no mapa (botões Mover / Atacar / Patrulha): "", "move", "attack_move", "patrol"
+var order_mode := ""
+## Grupos de controle: tecla 1..9 -> lista de entidades
+var groups := {}
+var _group_key := -1
+var _group_t := 0
+const ORDER_NAMES := {"move": "Mover", "attack_move": "Atacar andando", "patrol": "Patrulha"}
 
 
 func _ready() -> void:
@@ -262,7 +269,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_tree().change_scene_to_file("res://scenes/menu.tscn")
 		elif event.keycode == KEY_ESCAPE:
 			# Esc cancela o que estiver em andamento; sem nada para cancelar, pausa
-			if placing != "":
+			if order_mode != "":
+				set_order_mode("")
+			elif placing != "":
 				placing = ""
 			elif not selection.is_empty():
 				_set_selection([])
@@ -270,8 +279,27 @@ func _unhandled_input(event: InputEvent) -> void:
 				pause_menu.open()
 		elif event.keycode == KEY_P:
 			pause_menu.open()
-		elif event.keycode == KEY_K and not Game.game_over:
+		elif Game.game_over:
+			pass
+		elif event.keycode == KEY_K:
 			toggle_repair_selected()
+		elif event.keycode >= KEY_1 and event.keycode <= KEY_9:
+			_group_input(event.keycode - KEY_0, event.ctrl_pressed)
+		elif event.keycode == KEY_SPACE:
+			if Sfx.last_alert_pos.x >= 0.0:
+				cam.focus(Sfx.last_alert_pos)
+		elif event.keycode == KEY_DELETE:
+			recycle_selected()
+		elif event.keycode == KEY_M:
+			set_order_mode("move")
+		elif event.keycode == KEY_Q:
+			set_order_mode("patrol")
+		elif event.keycode == KEY_X:
+			unit_order("stop")
+		elif event.keycode == KEY_G:
+			unit_order("defend")
+		elif event.keycode == KEY_H:
+			unit_order("aggressive")
 		elif event.keycode == KEY_F11:
 			Ambience.toggle_fullscreen()
 		return
@@ -280,7 +308,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
-			if placing != "":
+			if order_mode != "":
+				_command(ground_mouse(), order_mode)
+				set_order_mode("")
+			elif placing != "":
 				_try_place()
 			else:
 				dragging = true
@@ -289,10 +320,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			dragging = false
 			_finish_selection(event.position)
 	elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-		if placing != "":
+		if order_mode != "":
+			set_order_mode("")
+		elif placing != "":
 			placing = ""
 		else:
-			_command(ground_mouse(), event.ctrl_pressed)
+			_command(ground_mouse(), "attack_move" if event.ctrl_pressed else "move")
 
 
 func _set_selection(list: Array) -> void:
@@ -346,11 +379,126 @@ func _entity_at():
 	return null
 
 
-func _command(pos: Vector2, attack_move: bool) -> void:
-	var units := selection.filter(func(s): return s is Unit)
+## Unidades selecionadas do jogador (sem prédios).
+func selected_units() -> Array:
+	return selection.filter(func(s): return is_instance_valid(s) and s is Unit and not s.dead)
+
+
+## Espera um clique no mapa para dar a ordem (botões Mover / Atacar andando / Patrulha).
+func set_order_mode(mode: String) -> void:
+	if mode != "" and selected_units().is_empty():
+		return
+	order_mode = mode
+	if mode != "":
+		hud.show_message("%s: clique no mapa para o destino (botão direito cancela)" % ORDER_NAMES[mode])
+
+
+## Ordens imediatas: "stop", "defend", "aggressive".
+func unit_order(kind: String) -> void:
+	var units := selected_units()
 	if units.is_empty():
 		return
-	var target = _entity_at()
+	Sfx.ordered(units[0], false)
+	if Net.is_client():
+		var ids: Array = units.map(func(u): return u.net_id)
+		if kind == "stop":
+			Net.order("stop", [ids])
+		else:
+			Net.order("stance", [ids, kind])
+	for u in units:
+		if Net.is_client():
+			if kind != "stop":
+				u.stance = kind   # só para o painel; quem age é o anfitrião
+		elif kind == "stop":
+			u.command_stop()
+		else:
+			u.set_stance(kind)
+	hud.info.refresh()
+	hud.show_message({"stop": "Parar", "defend": "Postura: DEFENDER (segura a posição)",
+			"aggressive": "Postura: AGRESSIVO (persegue inimigos)"}[kind])
+
+
+## Ctrl + número grava a seleção; número seleciona; o mesmo número duas vezes seguidas
+## leva a câmera até o grupo.
+func _group_input(n: int, assign: bool) -> void:
+	if assign:
+		var list := selection.filter(func(s): return is_instance_valid(s) and s.team == Game.local_team)
+		if list.is_empty():
+			groups.erase(n)
+			hud.show_message("Grupo %d apagado" % n)
+		else:
+			groups[n] = list
+			hud.show_message("Grupo %d: %d selecionados" % [n, list.size()])
+		return
+	var list: Array = groups.get(n, []).filter(func(s): return is_instance_valid(s) and not s.dead)
+	groups[n] = list
+	if list.is_empty():
+		return
+	var now := Time.get_ticks_msec()
+	if _group_key == n and now - _group_t < 400:
+		var c := Vector2.ZERO
+		for e in list:
+			c += e.position
+		cam.focus(c / list.size())
+	_group_key = n
+	_group_t = now
+	_set_selection(list)
+	var units := list.filter(func(s): return s is Unit)
+	if not units.is_empty():
+		Sfx.selected(units[0])
+
+
+var _recycle_armed_t := -100000
+
+
+## Reciclagem pedida há pouco (o segundo clique / Delete confirma).
+func recycle_armed() -> bool:
+	return Time.get_ticks_msec() - _recycle_armed_t < 3000
+
+
+## Recicla os prédios selecionados (tecla Delete ou botão no painel), devolvendo 80% do custo.
+## Precisa de confirmação: o primeiro pedido arma, o segundo (em até 3 s) recicla.
+func recycle_selected() -> void:
+	var list := selection.filter(func(e): return is_instance_valid(e) and e is Building and e.team == Game.local_team and e.can_recycle())
+	if list.is_empty():
+		return
+	if not recycle_armed():
+		_recycle_armed_t = Time.get_ticks_msec()
+		hud.show_message("Reciclar? Clique de novo (ou Delete) para confirmar")
+		return
+	_recycle_armed_t = -100000
+	for e in selection.duplicate():
+		if is_instance_valid(e) and e is Building and e.team == Game.local_team and e.can_recycle():
+			if Net.is_client():
+				Net.order("recycle", [e.net_id])
+			else:
+				e.recycle()
+	_set_selection(selection.filter(func(s): return is_instance_valid(s) and not s.dead))
+
+
+## Botão direito com prédios produtores selecionados: marca o ponto de reunião.
+func _set_rally(pos: Vector2) -> bool:
+	var done := false
+	for e in selection:
+		if is_instance_valid(e) and e is Building and e.team == Game.local_team and e.produces_units():
+			e.set_rally(pos)
+			if Net.is_client():
+				Net.order("rally", [e.net_id, pos])
+			done = true
+	if done:
+		overlay.add_marker(pos, Color(0.5, 1.0, 0.6))
+		Sfx.ui("click")
+		hud.show_message("Ponto de reunião marcado: as unidades novas vão para lá")
+	return done
+
+
+func _command(pos: Vector2, kind: String) -> void:
+	var units := selected_units()
+	if units.is_empty():
+		_set_rally(pos)
+		return
+	var attack_move := kind == "attack_move"
+	var target = _entity_at() if kind != "patrol" else null
 	Sfx.ordered(units[0], attack_move or (target != null and target.team != Game.local_team))
 	if target != null and target.team != Game.local_team:
 		if Net.is_client():
@@ -374,13 +522,20 @@ func _command(pos: Vector2, attack_move: bool) -> void:
 		if Net.is_client():
 			ids.append(units[i].net_id)
 			goals.append(pos + off)
+		elif kind == "patrol":
+			units[i].command_patrol(pos + off)
 		elif attack_move:
 			units[i].command_attack_move(pos + off)
 		else:
 			units[i].command_move(pos + off)
 	if Net.is_client():
-		Net.order("attack_move" if attack_move else "move", [ids, goals])
-	overlay.add_marker(pos, Color(1, 0.6, 0.3) if attack_move else Color(0.95, 0.85, 0.5))
+		Net.order(kind, [ids, goals])
+	var col := Color(0.95, 0.85, 0.5)
+	if attack_move:
+		col = Color(1, 0.6, 0.3)
+	elif kind == "patrol":
+		col = Color(0.5, 0.8, 1.0)
+	overlay.add_marker(pos, col)
 
 
 func _on_minimap_clicked(ground_pos: Vector2) -> void:

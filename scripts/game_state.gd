@@ -717,7 +717,9 @@ func _process(delta: float) -> void:
 						Sfx.ui("ready")
 				else:
 					var pos := producer.position if cat == "air" else producer.exit_position()
-					spawn_unit(job["type"], team, pos)
+					var u := spawn_unit(job["type"], team, pos)
+					if producer.has_rally:
+						u.command_move(producer.rally)   # coletor: o ponto vira o campo de trabalho
 					if team == local_team:
 						Sfx.ui("ready")
 					production[team].erase(cat)

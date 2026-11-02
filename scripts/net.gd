@@ -457,7 +457,7 @@ func _order(kind: String, args: Array) -> void:
 		return
 	var T := Game.ENEMY
 	match kind:
-		"move", "attack_move":
+		"move", "attack_move", "patrol":
 			var ids: Array = args[0]
 			var goals: Array = args[1]
 			for i in ids.size():
@@ -465,8 +465,26 @@ func _order(kind: String, args: Array) -> void:
 				if u is Unit and u.team == T:
 					if kind == "move":
 						u.command_move(goals[i])
+					elif kind == "patrol":
+						u.command_patrol(goals[i])
 					else:
 						u.command_attack_move(goals[i])
+		"stop", "stance":
+			for id in args[0]:
+				var u = Game.by_id(int(id))
+				if u is Unit and u.team == T:
+					if kind == "stop":
+						u.command_stop()
+					else:
+						u.set_stance(String(args[1]))
+		"rally":
+			var b = Game.by_id(int(args[0]))
+			if b is Building and b.team == T:
+				b.set_rally(args[1])
+		"recycle":
+			var b = Game.by_id(int(args[0]))
+			if b is Building and b.team == T:
+				b.recycle()
 		"attack":
 			var target = Game.by_id(int(args[1]))
 			if target == null:
@@ -488,6 +506,18 @@ func _order(kind: String, args: Array) -> void:
 
 
 # ---------------------------------------------------------------- eventos do anfitrião
+
+## Prédio reciclado: o convidado o remove sem explosão (antes de o snapshot sumir com ele).
+func send_recycled(id: int) -> void:
+	if is_host():
+		_recycled.rpc(id)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _recycled(id: int) -> void:
+	var b = Game.by_id(id)
+	if b is Building and not b.dead:
+		b.recycle()
 
 func send_message(text: String) -> void:
 	if is_host():

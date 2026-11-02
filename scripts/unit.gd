@@ -12,6 +12,13 @@ var attack_move := false     # andar atacando o que encontrar
 var attack_goal := Vector2.ZERO
 var guarding := false         # perseguindo por conta própria; volta para guard_pos depois
 var guard_pos := Vector2.ZERO
+## Postura: "aggressive" persegue inimigos que vê; "defend" segura a posição e só atira no
+## que estiver no alcance da arma.
+var stance := "aggressive"
+## Patrulha: anda atacando entre patrol_a e patrol_b, sem parar
+var patrolling := false
+var patrol_a := Vector2.ZERO
+var patrol_b := Vector2.ZERO
 var repath_timer := 0.0
 var scan_timer := 0.0
 var is_infantry := true
@@ -77,6 +84,7 @@ func setup(t: String, tm: int) -> void:
 # ---------------------------------------------------------------- comandos
 
 func command_move(goal: Vector2) -> void:
+	patrolling = false
 	set_target(null)
 	forced_target = false
 	attack_move = false
@@ -88,6 +96,7 @@ func command_attack(t: Entity) -> void:
 	if weapon.is_empty() or not can_hit(t):
 		command_move(t.position)
 		return
+	patrolling = false
 	attack_move = false
 	guarding = false
 	set_target(t)
@@ -96,12 +105,44 @@ func command_attack(t: Entity) -> void:
 
 
 func command_attack_move(goal: Vector2) -> void:
+	patrolling = false
 	set_target(null)
 	forced_target = false
 	guarding = false
 	attack_move = not weapon.is_empty()
 	attack_goal = goal
 	_set_path(goal)
+
+
+## Patrulha entre a posição atual e `goal`, atacando o que aparecer no caminho.
+func command_patrol(goal: Vector2) -> void:
+	if weapon.is_empty():
+		command_move(goal)
+		return
+	command_attack_move(goal)
+	patrolling = true
+	patrol_a = position
+	patrol_b = goal
+
+
+## Para onde está, esquecendo alvo, caminho e patrulha.
+func command_stop() -> void:
+	patrolling = false
+	attack_move = false
+	guarding = false
+	forced_target = false
+	set_target(null)
+	stop()
+
+
+func set_stance(s: String) -> void:
+	stance = s
+	if s == "defend" and not forced_target:
+		guarding = false
+		if has_target and not in_range(target):
+			set_target(null)
+		if not attack_move and not patrolling:
+			stop()
 
 
 func _set_path(goal: Vector2) -> void:
@@ -149,6 +190,12 @@ func _process(delta: float) -> void:
 	else:
 		if not weapon.is_empty():
 			_update_combat(delta)
+		if patrolling and is_idle() and not has_target:
+			var next := patrol_a
+			patrol_a = patrol_b
+			patrol_b = next
+			attack_goal = next
+			_set_path(next)
 		_follow_path(delta)
 		_separate(delta)
 		if not flying:
@@ -207,10 +254,13 @@ func _update_combat(delta: float) -> void:
 		scan_timer -= delta
 		if scan_timer <= 0.0 and (attack_move or is_idle()):
 			scan_timer = 0.4
-			var e := Game.nearest_enemy(position, team, sight * Game.TILE, self)
+			# Defendendo (parado) só mira no que já está ao alcance da arma
+			var holding := stance == "defend" and not attack_move
+			var reach: float = float(weapon["range"]) if holding else sight * Game.TILE
+			var e := Game.nearest_enemy(position, team, reach, self)
 			if e != null:
 				set_target(e)
-				if not attack_move and not guarding:
+				if not attack_move and not guarding and not holding:
 					guarding = true
 					guard_pos = position
 
@@ -225,6 +275,8 @@ func _update_combat(delta: float) -> void:
 				fire()
 		elif absf(angle_difference(turret_angle, aim_angle)) < 0.3:
 			fire()   # tanques giram a torre antes de atirar
+	elif stance == "defend" and not forced_target and not attack_move:
+		set_target(null)   # defendendo: não sai da posição para perseguir
 	elif forced_target or attack_move or (guarding and guard_pos.distance_to(target.position) < sight * Game.TILE * 1.5):
 		repath_timer -= delta
 		if repath_timer <= 0.0:

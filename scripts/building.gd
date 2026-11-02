@@ -29,6 +29,16 @@ const HEAL_TICK := 1.0
 const HEAL_COLOR := Color(0.35, 1.0, 0.5)
 var _heal_t := 0.0
 var _range_ring: MeshInstance3D
+## Reciclar devolve esta fração do custo (o prédio some sem explodir)
+const RECYCLE_REFUND := 0.8
+var recycled := false
+## Ponto de reunião (prédios que produzem unidades): as unidades novas andam até lá
+var has_rally := false
+var rally := Vector2.ZERO
+var _rally_mark: Node3D
+## Último dano recebido (ms): o minimapa pisca o prédio em vermelho
+var hit_at := -100000
+var _prev_hp := 0.0
 
 
 func setup(t: String, tm: int, c: Vector2i) -> void:
@@ -61,6 +71,7 @@ func setup(t: String, tm: int, c: Vector2i) -> void:
 	sel_ring = Fx3D.ring(half, 0.07, Color(0.75, 0.95, 1.0, 0.95), true)
 	sel_ring.visible = selected
 	root.add_child(sel_ring)
+	_prev_hp = hp
 	if data.has("heal"):
 		_range_ring = range_ring(float(data["heal"]["range"]))
 		_range_ring.visible = false
@@ -153,6 +164,14 @@ func pick_box() -> AABB:
 
 func _process(delta: float) -> void:
 	_t += delta
+	# Dano percebido pela queda da vida (no convidado ela vem do anfitrião)
+	if hp < _prev_hp - 0.01:
+		hit_at = Time.get_ticks_msec()
+		if team == Game.local_team:
+			Sfx.building_attacked(self)
+	_prev_hp = hp
+	if _rally_mark != null:
+		_rally_mark.visible = selected and has_rally
 	if not built:
 		_update_construction(delta)
 		return
@@ -243,6 +262,64 @@ func _heal_area() -> void:
 			fx.finished.connect(fx.queue_free)
 
 
+## Valor devolvido ao reciclar.
+func recycle_value() -> int:
+	return int(float(data["cost"]) * RECYCLE_REFUND)
+
+
+func can_recycle() -> bool:
+	return type != "cy" and not dead
+
+
+## Desmonta o prédio e devolve RECYCLE_REFUND do custo (só no anfitrião; o convidado só
+## vê o efeito).
+func recycle() -> void:
+	if not can_recycle():
+		return
+	recycled = true
+	if not Net.is_client():
+		Game.credits[team] += recycle_value()
+		Game.notify(team, "%s reciclado: +%d créditos" % [Game.item_name(type, team), recycle_value()])
+		Net.send_recycled(net_id)
+	die()
+
+
+func produces_units() -> bool:
+	return data["produces"] in ["infantry", "vehicle", "air"]
+
+
+func set_rally(p: Vector2) -> void:
+	has_rally = true
+	rally = p
+	if _rally_mark == null:
+		_rally_mark = Node3D.new()
+		var pole := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.025
+		cyl.bottom_radius = 0.025
+		cyl.height = 0.9
+		pole.mesh = cyl
+		pole.position.y = 0.45
+		pole.material_override = Fx3D.flat_material(Color(0.85, 0.9, 1.0))
+		_rally_mark.add_child(pole)
+		var flag := MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(0.4, 0.25)
+		flag.mesh = q
+		flag.position = Vector3(0.2, 0.75, 0)
+		flag.material_override = Fx3D.flat_material(Game.team_color(team))
+		flag.material_override.cull_mode = BaseMaterial3D.CULL_DISABLED
+		_rally_mark.add_child(flag)
+		_rally_mark.add_child(Fx3D.ring(Vector2(0.35, 0.35), 0.05, Color(Game.team_color(team), 0.8)))
+		Game.world.add_child(_rally_mark)
+	_rally_mark.position = Game.to3d(rally)
+
+
+func _exit_tree() -> void:
+	if _rally_mark != null:
+		_rally_mark.queue_free()
+
+
 ## Custo por ponto de vida: metade do custo do prédio dividida pela vida máxima.
 func repair_cost_per_hp() -> float:
 	return float(data["cost"]) * 0.5 / max_hp
@@ -287,6 +364,19 @@ func die() -> void:
 	if dead:
 		return
 	Game.map.set_cells_blocked(cell, size, false)
+	if recycled:
+		# Reciclado: some com faíscas e o som de obra, sem explosão
+		var fx := Fx3D.sparks(Vector2(size), Game.team_color(team))
+		fx.one_shot = true
+		Game.world.add_child(fx)
+		fx.global_position = Game.to3d(position)
+		fx.emitting = true
+		fx.finished.connect(fx.queue_free)
+		Sfx.build(self)
+		dead = true
+		Game.remove_entity(self)
+		queue_free()
+		return
 	for i in 3:
 		var off := Vector2(randf_range(-1, 1) * size.x, randf_range(-1, 1) * size.y) * 10.0
 		Game.spawn_explosion(position + off, radius * 0.8, 0.2)

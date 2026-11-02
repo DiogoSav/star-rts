@@ -51,6 +51,8 @@ func _cell_size() -> Vector2:
 func _draw() -> void:
 	draw_texture_rect(_tex, Rect2(Vector2.ZERO, size), false)
 	var k := _cell_size() / Game.TILE
+	var now := Time.get_ticks_msec()
+	var blink := (now / 250) % 2 == 0
 	for e in Game.entities:
 		if e.team != Game.local_team and not e.visible:
 			continue
@@ -59,7 +61,13 @@ func _draw() -> void:
 			var q: Vector2 = e.position * k
 			draw_colored_polygon(PackedVector2Array([q + Vector2(0, -3), q + Vector2(3, 2), q + Vector2(-3, 2)]), col)
 		elif e is Building:
-			draw_rect(Rect2(Vector2(e.cell) * _cell_size(), Vector2(e.size) * _cell_size()), col)
+			var r := Rect2(Vector2(e.cell) * _cell_size(), Vector2(e.size) * _cell_size())
+			# Prédio do jogador atacado nos últimos 4 s: pisca em vermelho com um contorno
+			if e.team == Game.local_team and now - e.hit_at < 4000:
+				col = Color(1.0, 0.15, 0.1) if blink else col
+				if blink:
+					draw_rect(r.grow(2.0), Color(1.0, 0.2, 0.1), false, 1.5)
+			draw_rect(r, col)
 		else:
 			draw_rect(Rect2(e.position * k - Vector2(1.5, 1.5), Vector2(3, 3)), col)
 	# Área vista pela câmera: os cantos da parte livre da tela projetados no chão

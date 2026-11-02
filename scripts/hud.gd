@@ -116,7 +116,7 @@ func _ready() -> void:
 	_section(box, "NAVES", fac["air"])
 
 	var help := Label.new()
-	help.text = "Arrastar: selecionar   ·   Botão dir.: mover / atacar   ·   Ctrl + dir.: andar atacando   ·   WASD: câmera   ·   Esc: cancelar / pausar   ·   P: pausa   ·   K: consertar prédio selecionado   ·   F11: tela cheia"
+	help.text = "Arrastar: selecionar  ·  Dir.: mover / atacar / ponto de reunião  ·  Ctrl+dir.: atacar andando  ·  M mover · Q patrulha · X parar · G defender · H agressivo  ·  Ctrl+1..9: grupo  ·  Espaço: último alerta  ·  K: consertar · Del: reciclar  ·  WASD: câmera  ·  P: pausa"
 	help.add_theme_font_size_override("font_size", 13)
 	help.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7, 0.8))
 	help.position = Vector2(16, 1080 - 30)

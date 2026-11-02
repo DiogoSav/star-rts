@@ -31,6 +31,9 @@ var _intensity := 0.0
 var _calm_t := 0.0
 var _alert_t := -100.0
 var _lost_t := -100.0
+var _base_alert_t := -100.0
+## Último prédio atacado (a barra de espaço leva a câmera até ele)
+var last_alert_pos := Vector2(-1, -1)
 
 
 func _ready() -> void:
@@ -253,15 +256,27 @@ func ordered(e, attack: bool) -> void:
 
 ## Algo seu levou dano: alerta de ataque (no máximo a cada 25 s).
 func hit(e) -> void:
-	if e.team != Game.local_team:
-		return
+	if e.team != Game.local_team or e is Building:
+		return   # prédios têm o alerta próprio (building_attacked)
 	var now := Time.get_ticks_msec() / 1000.0
 	if now - _alert_t < 25.0:
 		return
 	_alert_t = now
 	var race := _race(e)
 	play2d(race + "/alert" if _bank.has(race + "/alert") else "ui/alert", -1.0)
-	Game.message.emit("Estamos sob ataque!" if e is Unit else "Nossa base está sob ataque!")
+	Game.message.emit("Estamos sob ataque!")
+
+
+## Prédio do jogador perdendo vida: alerta com o nome dele (no máximo um a cada 12 s).
+func building_attacked(b) -> void:
+	last_alert_pos = b.position
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _base_alert_t < 12.0:
+		return
+	_base_alert_t = now
+	var race := _race(b)
+	play2d(race + "/alert" if _bank.has(race + "/alert") else "ui/alert", 0.0)
+	Game.message.emit("ALERTA: %s sob ataque!  (Espaço: ir até lá)" % Game.item_name(b.type, b.team))
 
 
 func build(b) -> void:

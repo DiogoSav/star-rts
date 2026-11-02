@@ -11,16 +11,34 @@ var state := "seek"
 var ore_cell := Vector2i(-1, -1)
 var refinery: Building = null
 var think := 0.0
+## Campo de trabalho: onde coletou por último (ou para onde o jogador mandou). Depois de
+## descarregar o coletor volta para ele, por mais longe que esteja da refinaria.
+var field := Vector2(-1, -1)
 
 
 func command_move(goal: Vector2) -> void:
 	super.command_move(goal)
 	state = "manual"
+	field = goal
 
 
 func command_attack_move(goal: Vector2) -> void:
 	super.command_attack_move(goal)
 	state = "manual"
+	field = goal
+
+
+## Cristal para coletar: perto do campo de trabalho; senão perto do coletor; senão o mais
+## próximo no mapa inteiro.
+func _find_ore() -> Vector2i:
+	var c := Vector2i(-1, -1)
+	if field.x >= 0.0:
+		c = Game.map.nearest_ore(field, 8)
+	if c.x < 0:
+		c = Game.map.nearest_ore(position, 24)
+	if c.x < 0:
+		c = Game.map.nearest_ore(position, maxi(Map.W, Map.H))
+	return c
 
 
 func _arrived() -> bool:
@@ -42,7 +60,7 @@ func _process(delta: float) -> void:
 				state = "return"
 			elif think <= 0.0:
 				think = 1.0
-				ore_cell = Game.map.nearest_ore(position, 24)
+				ore_cell = _find_ore()
 				if ore_cell.x >= 0:
 					_set_path(Game.map.cell_center(ore_cell))
 					state = "to_ore"
@@ -53,10 +71,13 @@ func _process(delta: float) -> void:
 				state = "seek"
 				think = 0.0
 			elif _arrived():
-				if Game.map.world_to_cell(position) == ore_cell:
+				# Outro coletor pode estar na célula: colhe de perto mesmo assim
+				if position.distance_to(Game.map.cell_center(ore_cell)) < Game.TILE * 1.6:
 					state = "harvest"
+					field = Game.map.cell_center(ore_cell)
 				else:
 					state = "seek"
+					think = 0.5
 		"harvest":
 			var got := Game.map.take_ore(ore_cell, HARVEST_RATE * delta)
 			cargo += got
@@ -78,7 +99,7 @@ func _process(delta: float) -> void:
 			if not valid_target(refinery):
 				state = "return"
 			elif _arrived():
-				if position.distance_to(refinery.dock_position()) < 40.0:
+				if position.distance_to(refinery.dock_position()) < Game.TILE * 1.7:
 					state = "unload"
 				else:
 					state = "return"

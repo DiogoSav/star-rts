@@ -33,6 +33,29 @@ atacando · WASD/bordas = câmera · roda = zoom · Esc/P = pausa · F11 = tela 
 categoria (até 5, pagos na hora); o botão mostra quantos faltam (×3). Botão direito no item
 cancela o último da fila e devolve os créditos. Prédios continuam um por vez.
 
+**Comandos das unidades** (barra no painel de seleção ou teclas): **Mover (M)** — anda
+ignorando inimigos (igual ao botão direito); **Atacar (Ctrl + direito)** — anda atacando;
+**Patrulha (Q)** — vai e volta entre a posição atual e o ponto, atacando o que aparecer;
+**Parar (X)**; posturas **Defender (G)** — segura a posição e só atira no que estiver ao
+alcance da arma — e **Agressivo (H)**, o padrão — persegue os inimigos que vê e depois volta.
+Em Mover/Atacar/Patrulha clique no destino (botão direito cancela).
+
+**Grupos:** Ctrl + 1..9 grava a seleção; o número seleciona o grupo; apertar duas vezes leva
+a câmera até ele.
+
+**Ponto de reunião:** selecione Quartel, Fábrica ou Hangar e clique com o botão direito no
+mapa; as unidades novas andam até lá (uma bandeira mostra o ponto). Um coletor mandado a um
+campo de cristais passa a trabalhar nele.
+
+**Reciclar:** selecione um prédio seu (menos o centro de comando) e clique em **Reciclar** ou
+aperte **Delete** — duas vezes para confirmar. Devolve 80% do custo.
+
+**Coletores:** depois de descarregar voltam ao campo onde estavam trabalhando, por mais longe
+que fique da refinaria (antes só procuravam num raio de 24 células).
+
+**Alerta de base:** prédio seu atacado dá um alerta com o nome dele (no máximo a cada 12 s) e
+pisca em vermelho no minimapa; **Espaço** leva a câmera até o último prédio atacado.
+
 **Estação de cura** (Estação Médica / Doca de Reparo / Poço de Regeneração; 700 créditos,
 requer Quartel): suas unidades num raio de 5 células — soldados, veículos e naves — recuperam
 3% da vida por segundo, de graça. Precisa de energia; várias estações juntas não somam. Com
