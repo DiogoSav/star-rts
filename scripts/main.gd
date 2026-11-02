@@ -5,8 +5,13 @@ extends Node3D
 ## o ponto onde ele cruza o chão é a posição das ordens, e as caixas das entidades
 ## decidem o que está sob o cursor.
 
-const PLAYER_BASE := Vector2i(8, 38)
-const ENEMY_BASE := Vector2i(55, 10)
+## Layout desenhado para o mapa pequeno (64×48). Nos maiores, tudo do jogador fica preso ao
+## canto inferior esquerdo e tudo do inimigo ao superior direito (Map.fit).
+const P_CORNER := Vector2(0, 1)
+const E_CORNER := Vector2(1, 0)
+
+var player_base: Vector2i
+var enemy_base: Vector2i
 
 var map: Map
 var world: Node3D
@@ -38,12 +43,12 @@ func _ready() -> void:
 	map = Map.new()
 	world.add_child(map)
 	Game.map = map
+	# Tamanho escolhido no menu (no multiplayer, pelo anfitrião na sala de espera)
+	Map.configure(Game.MAP_SIZES.get(Game.map_size, Game.MAP_SIZES["small"])["scale"])
+	player_base = Map.fit(Vector2i(8, 38), P_CORNER)
+	enemy_base = Map.fit(Vector2i(55, 10), E_CORNER)
 	# No multiplayer os dois geram o mesmo mapa a partir da semente do anfitrião
-	map.generate(Net.map_seed if Net.active else randi(), [PLAYER_BASE, ENEMY_BASE], [
-		[Vector2i(18, 35), 3], [Vector2i(45, 15), 3],    # perto das bases
-		[Vector2i(32, 24), 4],                            # centro, mais rico
-		[Vector2i(13, 12), 3], [Vector2i(51, 36), 3],     # cantos
-	])
+	map.generate(Net.map_seed if Net.active else randi(), [player_base, enemy_base], _resource_fields())
 	map.spawn_props(world)
 
 	fog = Fog.new()
@@ -80,7 +85,7 @@ func _ready() -> void:
 		add_child(ai)
 
 	_setup_bases()
-	cam.focus(map.cell_center(ENEMY_BASE if Game.local_team == Game.ENEMY else PLAYER_BASE))
+	cam.focus(map.cell_center(enemy_base if Game.local_team == Game.ENEMY else player_base))
 	var f := Game.faction(Game.local_team)
 	hud.show_message("%s: construa %s → %s e destrua a base inimiga!" % [f["army"], f["buildings"]["power"], f["buildings"]["refinery"]])
 	if Net.active:
@@ -145,29 +150,46 @@ func _setup_lights() -> void:
 	add_child(fill)
 
 
+## Campos de recurso [centro, raio]. Os do mapa pequeno se espalham com o mapa; os maiores
+## ganham campos extras (dois no médio, quatro no grande) para a economia acompanhar a área.
+func _resource_fields() -> Array:
+	var fields := [
+		[Map.fit(Vector2i(18, 35), P_CORNER), 3], [Map.fit(Vector2i(45, 15), E_CORNER), 3],   # perto das bases
+		[Map.fit(Vector2i(32, 24), Vector2(0.5, 0.5)), 4],                                   # centro, mais rico
+		[Map.fit(Vector2i(13, 12), Vector2(0, 0)), 3], [Map.fit(Vector2i(51, 36), Vector2(1, 1)), 3],   # cantos
+	]
+	if Map.W > Map.BASE_W:
+		fields.append([Map.fit(Vector2i(32, 9), Vector2(0.5, 0)), 3])
+		fields.append([Map.fit(Vector2i(32, 39), Vector2(0.5, 1)), 3])
+	if Game.map_size == "large":
+		fields.append([Map.fit(Vector2i(10, 22), Vector2(0, 0.5)), 3])
+		fields.append([Map.fit(Vector2i(54, 26), Vector2(1, 0.5)), 3])
+	return fields
+
+
 func _setup_bases() -> void:
 	if Net.is_client():
 		return   # no convidado tudo chega pelos snapshots do anfitrião
 	var P := Game.PLAYER
 	var E := Game.ENEMY
-	_starter(P, Vector2i(6, 37), Vector2i(10, 35), Vector2i(11, 37))
+	_starter(P, Map.fit(Vector2i(6, 37), P_CORNER), Map.fit(Vector2i(10, 35), P_CORNER), Map.fit(Vector2i(11, 37), P_CORNER))
 	if Net.active:
 		# Multiplayer: os dois começam iguais, em cantos opostos
-		_starter(E, Vector2i(52, 6), Vector2i(50, 11), Vector2i(51, 9))
+		_starter(E, Map.fit(Vector2i(52, 6), E_CORNER), Map.fit(Vector2i(50, 11), E_CORNER), Map.fit(Vector2i(51, 9), E_CORNER))
 		return
 	# Contra a IA: o inimigo começa com a base pronta
 	var ef := Game.faction(E)
-	Game.spawn_building("cy", E, Vector2i(52, 6))
-	Game.spawn_building("power", E, Vector2i(56, 6))
-	Game.spawn_building("power", E, Vector2i(59, 6))
-	Game.spawn_building("barracks", E, Vector2i(56, 9))
-	Game.spawn_building("refinery", E, Vector2i(52, 10))
-	Game.spawn_building("factory", E, Vector2i(58, 11))
-	Game.spawn_building("turret", E, Vector2i(49, 14))
-	Game.spawn_building("turret", E, Vector2i(54, 14))
-	Game.spawn_building("starport", E, Vector2i(48, 6))
+	Game.spawn_building("cy", E, Map.fit(Vector2i(52, 6), E_CORNER))
+	Game.spawn_building("power", E, Map.fit(Vector2i(56, 6), E_CORNER))
+	Game.spawn_building("power", E, Map.fit(Vector2i(59, 6), E_CORNER))
+	Game.spawn_building("barracks", E, Map.fit(Vector2i(56, 9), E_CORNER))
+	Game.spawn_building("refinery", E, Map.fit(Vector2i(52, 10), E_CORNER))
+	Game.spawn_building("factory", E, Map.fit(Vector2i(58, 11), E_CORNER))
+	Game.spawn_building("turret", E, Map.fit(Vector2i(49, 14), E_CORNER))
+	Game.spawn_building("turret", E, Map.fit(Vector2i(54, 14), E_CORNER))
+	Game.spawn_building("starport", E, Map.fit(Vector2i(48, 6), E_CORNER))
 	for i in 2:
-		Game.spawn_unit(ef["infantry"][i], E, map.cell_center(Vector2i(52 + i, 15)))
+		Game.spawn_unit(ef["infantry"][i], E, map.cell_center(Map.fit(Vector2i(52 + i, 15), E_CORNER)))
 
 
 ## Centro de comando, 3 soldados e 1 tanque.

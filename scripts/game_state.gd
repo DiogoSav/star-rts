@@ -332,11 +332,19 @@ const POP_MAX := 100
 const BUILD_ORDER := ["power", "refinery", "barracks", "factory", "starport", "turret"]
 const CATEGORY_NAMES := {"building": "construções", "infantry": "infantaria",
 		"vehicle": "veículos", "air": "naves"}
+## Tamanhos de mapa: escala sobre o mapa pequeno (64×48 células)
+const MAP_SIZES := {
+	"small": {"name": "Pequeno", "scale": 1.0},
+	"medium": {"name": "Médio", "scale": 1.35},
+	"large": {"name": "Grande", "scale": 1.6},
+}
 
 ## Raça escolhida no menu (persiste entre partidas). enemy_choice "" = aleatória.
 var player_faction := "hum"
 ## Nome do jogador no multiplayer (persiste entre partidas)
 var player_name := ""
+## Tamanho do mapa escolhido (MAP_SIZES); no multiplayer quem escolhe é o anfitrião
+var map_size := "small"
 ## Time controlado por este computador (no multiplayer o convidado é o time 1)
 var local_team := PLAYER
 ## Raças da partida multiplayer: [anfitrião, convidado]

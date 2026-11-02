@@ -58,9 +58,14 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_dist_goal = clampf(_dist_goal / 1.15, DIST_MIN, DIST_MAX)
+			_dist_goal = clampf(_dist_goal / 1.15, DIST_MIN, dist_max())
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_dist_goal = clampf(_dist_goal * 1.15, DIST_MIN, DIST_MAX)
+			_dist_goal = clampf(_dist_goal * 1.15, DIST_MIN, dist_max())
+
+
+## Afastamento máximo: cresce com o tamanho do mapa (médio e grande deixam ver mais).
+func dist_max() -> float:
+	return DIST_MAX * float(Map.W) / float(Map.BASE_W)
 
 
 ## Centraliza a área de jogo num ponto do chão (pixels de chão).

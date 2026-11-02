@@ -77,7 +77,7 @@ func host(my_name: String, my_race: String) -> void:
 	code = ""
 	for i in 5:
 		code += CODE_CHARS[randi() % CODE_CHARS.length()]
-	room = [{"name": my_name, "race": my_race, "ready": false}, {}]
+	room = [{"name": my_name, "race": my_race, "ready": false, "map": Game.map_size}, {}]
 	_start_signal(TOPIC % [code, "host"])
 	status.emit("Criando sala…")
 	room_changed.emit()
@@ -234,7 +234,7 @@ func _process(delta: float) -> void:
 			_count_n -= 1
 			if _count_n <= 0:
 				_count_t = -1.0
-				_start.rpc(randi(), [room[0]["race"], room[1]["race"]], [room[0]["name"], room[1]["name"]])
+				_start.rpc(randi(), [room[0]["race"], room[1]["race"]], [room[0]["name"], room[1]["name"]], room_map())
 			else:
 				_count_t = 1.0
 				_countdown.rpc(_count_n)
@@ -262,6 +262,16 @@ func set_ready(on: bool) -> void:
 	_request(me(), {"ready": on})
 
 
+## Tamanho do mapa: só o anfitrião escolhe (fica guardado na entrada dele na sala).
+func set_map(size: String) -> void:
+	if role == "host":
+		_request(0, {"map": size})
+
+
+func room_map() -> String:
+	return String(room[0].get("map", "small"))
+
+
 func send_chat(text: String) -> void:
 	text = text.strip_edges().left(200)
 	if text == "" or not connected and role != "host":
@@ -285,6 +295,15 @@ func _apply_change(who: int, change: Dictionary) -> void:
 	if p.is_empty():
 		return
 	var other: Dictionary = room[1 - who]
+	if change.has("map") and who == 0 and Game.MAP_SIZES.has(String(change["map"])):
+		# Mudou o mapa: os dois precisam confirmar de novo
+		p["map"] = String(change["map"])
+		p["ready"] = false
+		if not other.is_empty():
+			other["ready"] = false
+		_add_chat("Mapa: %s." % Game.MAP_SIZES[p["map"]]["name"])
+		if connected:
+			_chat_out.rpc("Mapa: %s." % Game.MAP_SIZES[p["map"]]["name"])
 	if change.has("race"):
 		var r := String(change["race"])
 		if Game.FACTIONS.has(r) and other.get("race", "") != r:
@@ -373,8 +392,9 @@ func _countdown(n: int) -> void:
 
 
 @rpc("authority", "call_local", "reliable")
-func _start(seed_value: int, races: Array, player_names: Array) -> void:
+func _start(seed_value: int, races: Array, player_names: Array, map_size: String) -> void:
 	map_seed = seed_value
+	Game.map_size = map_size
 	active = true
 	waiting = true
 	_loaded = [false, false]

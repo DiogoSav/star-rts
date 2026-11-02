@@ -102,6 +102,10 @@ var _countdown_label: Label
 var _ready_button: Button
 var _ships: Array = []
 var _enemy_buttons := {}
+var _solo_map_buttons := {}
+var _room_map_buttons := {}
+var _room_map_row: HBoxContainer
+var _room_map_info: Label
 
 
 func _ready() -> void:
@@ -158,6 +162,8 @@ func _ready() -> void:
 		enemy_row.add_child(b)
 		_enemy_buttons[key] = b
 	_set_enemy(Game.enemy_choice)
+	faction_page.add_child(_map_row(_solo_map_buttons, _set_solo_map))
+	_set_solo_map(Game.map_size)
 
 	var help := Label.new()
 	help.text = "Arrastar: selecionar   ·   Botão direito: mover / atacar   ·   Ctrl + botão direito: andar atacando\nWASD / bordas: câmera   ·   Roda: zoom   ·   Clique no minimapa: ir para o local   ·   F11: tela cheia"
@@ -443,6 +449,15 @@ func _build_room_page() -> void:
 		players.add_child(card)
 		_cards.append({"panel": card, "name": n, "race": r, "state": s})
 
+	# Tamanho do mapa (só o anfitrião muda; o convidado vê a escolha)
+	_room_map_row = _map_row(_room_map_buttons, func(k): Net.set_map(k))
+	room_page.add_child(_room_map_row)
+	_room_map_info = Label.new()
+	_room_map_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_room_map_info.add_theme_font_size_override("font_size", 20)
+	_room_map_info.add_theme_color_override("font_color", Color(0.75, 0.85, 0.95))
+	room_page.add_child(_room_map_info)
+
 	# Escolha de raça (do jogador local)
 	var races := HBoxContainer.new()
 	races.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -593,6 +608,15 @@ func _refresh_room() -> void:
 	for f in _race_buttons:
 		_race_buttons[f].set_pressed_no_signal(mine.get("race", "") == f)
 		_race_buttons[f].disabled = other.get("race", "") == f
+	# Mapa: o anfitrião escolhe nos botões; o convidado só vê a escolha, em texto
+	var map_k := Net.room_map()
+	for k in _room_map_buttons:
+		_room_map_buttons[k].set_pressed_no_signal(map_k == k)
+	_room_map_row.visible = Net.role == "host"
+	_room_map_info.visible = Net.role != "host"
+	var mi: Dictionary = Game.MAP_SIZES.get(map_k, Game.MAP_SIZES["small"])
+	_room_map_info.text = "Mapa:  %s  (%d×%d)   ·   escolhido pelo anfitrião" % [mi["name"],
+			roundi(Map.BASE_W * mi["scale"]), roundi(Map.BASE_H * mi["scale"])]
 	_ready_button.set_pressed_no_signal(mine.get("ready", false))
 	_ready_button.disabled = other.is_empty() or not Game.FACTIONS.has(mine.get("race", ""))
 	_ready_button.text = "PRONTO ✓" if mine.get("ready", false) else "PRONTO"
@@ -610,6 +634,35 @@ func _show_page(page: Control, leave := true) -> void:
 	if page == room_page:
 		_countdown_label.text = ""
 		_refresh_room()
+
+
+## Fileira "Mapa: Pequeno · Médio · Grande" (modo individual e sala de espera).
+func _map_row(buttons: Dictionary, on_pick: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	var l := Label.new()
+	l.text = "Mapa:"
+	l.add_theme_font_size_override("font_size", 20)
+	l.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+	row.add_child(l)
+	for k in Game.MAP_SIZES:
+		var info: Dictionary = Game.MAP_SIZES[k]
+		var b := make_button("%s  (%d×%d)" % [info["name"], roundi(Map.BASE_W * info["scale"]),
+				roundi(Map.BASE_H * info["scale"])])
+		b.toggle_mode = true
+		b.custom_minimum_size = Vector2(210, 44)
+		b.add_theme_font_size_override("font_size", 18)
+		b.pressed.connect(func(): on_pick.call(k))
+		row.add_child(b)
+		buttons[k] = b
+	return row
+
+
+func _set_solo_map(k: String) -> void:
+	Game.map_size = k
+	for key in _solo_map_buttons:
+		_solo_map_buttons[key].set_pressed_no_signal(key == k)
 
 
 func _set_enemy(key: String) -> void:

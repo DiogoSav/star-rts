@@ -6,8 +6,12 @@ extends Node3D
 
 enum { GRASS, ROCK, ORE }
 
-const W := 64
-const H := 48
+## Tamanho do mapa pequeno (o layout de bases e campos foi desenhado para ele)
+const BASE_W := 64
+const BASE_H := 48
+## Tamanho atual, em células (configure() antes de gerar o mapa)
+static var W := BASE_W
+static var H := BASE_H
 const ORE_MAX := 350.0
 const CRYSTALS_PER_CELL := 2
 
@@ -93,7 +97,8 @@ func generate(seed_value: int, base_centers: Array, ore_fields: Array) -> void:
 	blocked.fill(0)
 
 	# Formações rochosas (intransponíveis)
-	for i in 26:
+	var area_k := float(W * H) / float(BASE_W * BASE_H)
+	for i in roundi(26 * area_k):
 		var c := Vector2i(rng.randi_range(0, W - 1), rng.randi_range(0, H - 1))
 		_fill_circle(c, rng.randi_range(1, 3), ROCK)
 
@@ -123,6 +128,19 @@ func generate(seed_value: int, base_centers: Array, ore_fields: Array) -> void:
 				astar.set_point_solid(Vector2i(x, y), true)
 	_build_terrain()
 	_build_crystals()
+
+
+## Define o tamanho do mapa: escala 1 = 64×48; 1,35 e 1,6 para médio e grande.
+static func configure(scale: float) -> void:
+	W = roundi(BASE_W * scale)
+	H = roundi(BASE_H * scale)
+
+
+## Converte uma célula do layout do mapa pequeno para o mapa atual, mantendo-a presa a um
+## ponto de referência: anchor (0, 0) = canto superior esquerdo, (1, 1) = inferior direito,
+## (0.5, 0.5) = centro. Assim as bases ficam nos cantos e o resto se espalha.
+static func fit(c: Vector2i, anchor: Vector2) -> Vector2i:
+	return c + Vector2i(roundi((W - BASE_W) * anchor.x), roundi((H - BASE_H) * anchor.y))
 
 
 func _fill_circle(center: Vector2i, r: int, value: int) -> void:

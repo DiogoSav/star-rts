@@ -63,7 +63,7 @@ func _process(delta: float) -> void:
 
 
 func _player_target():
-	var base := Vector2(55, 10) * Game.TILE
+	var base := Vector2(Map.fit(Vector2i(55, 10), Vector2(1, 0))) * Game.TILE
 	var best = null
 	var best_d := INF
 	for e in Game.entities:

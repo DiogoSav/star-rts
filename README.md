@@ -33,6 +33,12 @@ atacando · WASD/bordas = câmera · roda = zoom · Esc/P = pausa · F11 = tela 
 categoria (até 5, pagos na hora); o botão mostra quantos faltam (×3). Botão direito no item
 cancela o último da fila e devolve os créditos. Prédios continuam um por vez.
 
+**Tamanho do mapa:** Pequeno (64×48 células), Médio (86×65, 35% maior) e Grande (102×77,
+60% maior). No modo individual escolhe-se na tela de raça; no multiplayer o anfitrião escolhe
+na sala de espera (o convidado vê a escolha; mudar o mapa desmarca o PRONTO dos dois). As
+bases ficam nos cantos, os campos de recurso se espalham e os mapas maiores ganham campos
+extras (2 no médio, 4 no grande) e mais rochas; o zoom máximo da câmera acompanha o tamanho.
+
 **População:** cada unidade ocupa espaço — soldado 1; coletor, batedor e caça 2; tanque 3;
 pesado e nave pesada 4. O limite começa em 30 e cada gerador de energia pronto soma 20, até
 o máximo de 100. Unidades na fila já reservam o espaço; sem espaço, os botões ficam
